@@ -1,263 +1,95 @@
-import { useEffect, useMemo, useState } from "react";
-import useSWR from "swr";
+import { useState } from "react";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
-type UploadResponse = {
-  file_name: string;
-  members: number;
-  name_column: string;
-  month_columns: string[];
-};
-
-type CardResult = {
-  card: string;
-  detected_name: string | null;
-  detected_month: string | null;
-  matched_name?: string;
-  confidence: number;
-  status: string;
-  already_marked?: boolean;
-  message?: string;
-  raw_text?: string;
-  possible_matches?: { matched_name: string; confidence: number }[];
-};
-
-type StatusResponse = {
-  sheet_loaded: boolean;
-  statistics: Record<string, number>;
-  results: CardResult[];
-};
-
-const formatStatus = (status: string) => status.replace(/ /g, " ");
-
 export default function Home() {
-  const [token, setToken] = useState<string>("");
+  const [accountId, setAccountId] = useState("");
   const [password, setPassword] = useState("");
-  const [sheetInfo, setSheetInfo] = useState<UploadResponse | null>(null);
-  const [sheetFileName, setSheetFileName] = useState("");
-  const [selectedSheet, setSelectedSheet] = useState<File | null>(null);
-  const [selectedCards, setSelectedCards] = useState<File[]>([]);
-  const [cards, setCards] = useState<{ filename: string; path: string }[]>([]);
-  const [results, setResults] = useState<CardResult[]>([]);
-  const [status, setStatus] = useState<StatusResponse | null>(null);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [notification, setNotification] = useState<string | null>(null);
-  const [reviewCard, setReviewCard] = useState<CardResult | null>(null);
-  const [confirmMatchName, setConfirmMatchName] = useState("");
-  const [confirmMonth, setConfirmMonth] = useState("");
 
-  const months = useMemo(
-    () => [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-    ],
-    []
-  );
-
-  useEffect(() => {
-    if (!token) return;
-    fetchStatus();
-  }, [token]);
-
-  async function login() {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
     setLoading(true);
     try {
-      const form = new FormData();
-      form.append("password", password);
-      const response = await fetch(`${BACKEND_URL}/login`, {
+      const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
         method: "POST",
-        body: form,
-      });
-      if (!response.ok) throw new Error("Login failed");
-      const data = await response.json();
-      setToken(data.token);
-      setNotification("Administrator login succeeded.");
-    } catch (error) {
-      setNotification("Login failed. Check your password.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function fetchStatus() {
-    try {
-      const response = await fetch(`${BACKEND_URL}/status?auth_token=${encodeURIComponent(token)}`);
-      if (!response.ok) return;
-      const data = await response.json();
-      setStatus(data);
-      if (data.results) {
-        setResults(data.results);
-      }
-    } catch (error) {
-      console.error(error);
-    }
-  }
-
-  async function uploadSheet() {
-    if (!selectedSheet) return;
-    setLoading(true);
-    try {
-      const form = new FormData();
-      form.append("token", token);
-      form.append("file", selectedSheet);
-      const response = await fetch(`${BACKEND_URL}/upload-sheet`, {
-        method: "POST",
-        body: form,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId, password }),
       });
       if (!response.ok) {
         const body = await response.json();
-        throw new Error(body.detail || "Upload failed");
+        throw new Error(body.error || "Login failed.");
       }
       const data = await response.json();
-      setSheetInfo(data);
-      setSheetFileName(selectedSheet.name);
-      setNotification("Member sheet uploaded successfully.");
-    } catch (error) {
-      setNotification((error as Error).message);
+      localStorage.setItem("authToken", data.token);
+      window.location.href = "/dashboard";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to login.");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function uploadCards() {
-    if (!selectedCards.length) return;
-    setLoading(true);
-    try {
-      const form = new FormData();
-      form.append("token", token);
-      selectedCards.forEach((file) => form.append("files", file));
-      const response = await fetch(`${BACKEND_URL}/upload-cards`, {
-        method: "POST",
-        body: form,
-      });
-      if (!response.ok) {
-        const body = await response.json();
-        throw new Error(body.detail || "Card upload failed");
-      }
-      const data = await response.json();
-      setCards(selectedCards.map((file) => ({ filename: file.name, path: "" })));
-      setNotification(`Uploaded ${data.uploaded.length} card(s).`);
-      await fetchStatus();
-    } catch (error) {
-      setNotification((error as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function processCards() {
-    setLoading(true);
-    try {
-      const response = await fetch(`${BACKEND_URL}/process-cards`, {
-        method: "POST",
-        body: new URLSearchParams({ token }),
-      });
-      if (!response.ok) throw new Error("Processing failed");
-      const data = await response.json();
-      setResults(data.results);
-      setStatus(data);
-      setNotification("Card processing completed.");
-    } catch (error) {
-      setNotification((error as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleConfirm() {
-    if (!reviewCard) return;
-    setLoading(true);
-    try {
-      const form = new FormData();
-      form.append("token", token);
-      form.append("match_name", confirmMatchName);
-      form.append("month", confirmMonth);
-      form.append("card", reviewCard.card);
-      const response = await fetch(`${BACKEND_URL}/confirm`, {
-        method: "POST",
-        body: form,
-      });
-      if (!response.ok) {
-        const body = await response.json();
-        throw new Error(body.detail || "Confirmation failed");
-      }
-      const result = await response.json();
-      setNotification("Manual review submitted.");
-      setReviewCard(null);
-      await processCards();
-    } catch (error) {
-      setNotification((error as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function downloadUpdatedSheet() {
-    try {
-      const response = await fetch(`${BACKEND_URL}/download?auth_token=${encodeURIComponent(token)}`);
-      if (!response.ok) throw new Error("Download failed");
-      const blob = await response.blob();
-      const href = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = href;
-      anchor.download = "updated-sheet.xlsx";
-      anchor.click();
-      URL.revokeObjectURL(href);
-      setNotification("Updated spreadsheet downloaded.");
-    } catch (error) {
-      setNotification((error as Error).message);
     }
   }
 
   return (
-    <div className="container">
-      <div className="header">
-        <h1>Administrator Auto Card Marking</h1>
-        <p>Automatically detect member names and months from uploaded cards.</p>
-      </div>
+    <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-950">
+      <div className="mx-auto flex max-w-6xl flex-col gap-12 lg:flex-row lg:items-center lg:justify-between">
+        <section className="space-y-6">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-brand-700">Readers Circle Management</p>
+          <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+            READERS CIRCLE OF T.B. JAYAH ZAHIRA COLLEGE, COLOMBO 02
+          </h1>
+          <p className="max-w-2xl text-lg leading-8 text-slate-700">
+            AUTO MONTHLY CARD PAYMENT MARKING SYSTEM designed for secure member payments, OCR card processing, role-based administration, and reliable audit workflows.
+          </p>
+        </section>
 
-      {!token ? (
-        <div className="card section">
-          <h2>Admin Login</h2>
-          <div className="field-group">
-            <input
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Administrator password"
-              type="password"
-            />
-            <button className="button" onClick={login} disabled={loading || !password}>
-              {loading ? "Signing in..." : "Sign In"}
-            </button>
+        <section className="w-full max-w-md rounded-[32px] border border-slate-200 bg-white p-10 shadow-xl">
+          <div className="mb-8 space-y-3">
+            <p className="text-sm uppercase tracking-[0.24em] text-brand-600">Secure Sign In</p>
+            <h2 className="text-2xl font-semibold text-slate-950">Account ID and password</h2>
           </div>
-        </div>
-      ) : (
-        <>
-          <div className="card section">
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
-              <div>
-                <h2>Dashboard</h2>
-                <p>Upload the member sheet and card images to begin automated marking.</p>
-              </div>
-              <button className="button secondary" onClick={downloadUpdatedSheet} disabled={!sheetInfo}>
-                Download Updated Spreadsheet
-              </button>
-            </div>
 
-            <div className="field-group" style={{ marginTop: "18px" }}>
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            <label className="block text-sm font-medium text-slate-700">
+              Account ID
+              <input
+                className="mt-2 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+                value={accountId}
+                onChange={(event) => setAccountId(event.target.value)}
+                placeholder="Enter your account ID"
+              />
+            </label>
+            <label className="block text-sm font-medium text-slate-700">
+              Password
+              <input
+                type="password"
+                className="mt-2 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Enter your password"
+              />
+            </label>
+            {error && <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+            <button
+              type="submit"
+              disabled={!accountId || !password || loading}
+              className="w-full rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              {loading ? "Signing in..." : "Sign in"}
+            </button>
+          </form>
+
+          <div className="mt-8 rounded-3xl bg-slate-50 p-5 text-sm text-slate-600">
+            <p className="font-semibold text-slate-900">Secure access for all roles</p>
+            <p className="mt-2">Owner, Super Admin, Administrator, Admin and Member roles use the same central backend with strong authentication.</p>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
               <div>
                 <strong>Total Cards</strong>
                 <div>{status?.statistics.total_cards ?? 0}</div>

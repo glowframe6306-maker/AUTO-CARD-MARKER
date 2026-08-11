@@ -1,10 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  font-family: Inter, system-ui, sans-serif;
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
 html, body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  font-family: Inter, system-ui, sans-serif;
-  background: #f4f6fb;
-  color: #111827;
 }
 
 * {

@@ -119,6 +119,7 @@ model MemberProfile {
   memberId     String       @unique
   user         User         @relation(fields: [userId], references: [id])
   userId       Int          @unique
+  fullName     String
   grade        String
   position     String
   status       MemberStatus @default(ACTIVE)

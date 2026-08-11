@@ -98,6 +98,7 @@ async function main() {
       memberProfile: {
         create: {
           memberId: "RC001",
+          fullName: "Demo Member",
           grade: "Grade 10",
           position: "Reader",
           status: "ACTIVE",

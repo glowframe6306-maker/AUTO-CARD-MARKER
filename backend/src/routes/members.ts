@@ -40,15 +40,17 @@ router.post("/", requireAnyRole(["OWNER", "SUPER_ADMIN", "ADMINISTRATOR", "ADMIN
   if (existing) {
     return res.status(409).json({ error: "Member ID already exists." });
   }
+  const { hashPassword } = await import("../utils/auth");
   const user = await prisma.user.create({
     data: {
       accountId: memberId,
+      email,
       fullName,
-      passwordHash: await import("../utils/auth").then((m) => m.hashPassword("ChangeMe123!")),
+      passwordHash: await hashPassword("ChangeMe123!"),
       status: "ACTIVE",
       forcePasswordReset: true,
       memberProfile: {
-        create: { memberId, grade, position, status, photoUrl: null, customFields: customFields || {} },
+        create: { memberId, fullName, grade, position, status, photoUrl: null, customFields: customFields || {} },
       },
     },
   });

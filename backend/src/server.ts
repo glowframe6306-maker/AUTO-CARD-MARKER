@@ -14,6 +14,11 @@ import cardRouter from "./routes/cards";
 import approvalRouter from "./routes/approvals";
 import reportRouter from "./routes/reports";
 import systemRouter from "./routes/system";
+import userRouter from "./routes/users";
+import roleRouter from "./routes/roles";
+import notificationsRouter from "./routes/notifications";
+import announcementRouter from "./routes/announcements";
+import backupRouter from "./routes/backup";
 
 dotenv.config();
 
@@ -42,6 +47,11 @@ app.use("/api/cards", cardRouter);
 app.use("/api/approvals", approvalRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/system", systemRouter);
+app.use("/api/users", userRouter);
+app.use("/api/roles", roleRouter);
+app.use("/api/notifications", notificationsRouter);
+app.use("/api/announcements", announcementRouter);
+app.use("/api/backup", backupRouter);
 
 app.get("/health", (req, res) => res.json({ status: "ok", backend: "online" }));
 
