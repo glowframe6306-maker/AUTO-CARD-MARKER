@@ -1,6 +1,6 @@
-import { useState } from "react";
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+﻿import { FormEvent, useState } from "react";
+import { authFetch, getApiUrl, setAuthToken } from "../lib/api";
+import { initMediaStream } from "../lib/media";
 
 export default function Home() {
   const [accountId, setAccountId] = useState("");
@@ -8,12 +8,30 @@ export default function Home() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  async function requestCameraAndMicrophonePermission() {
+    if (typeof window === "undefined" || !navigator?.mediaDevices?.getUserMedia) {
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+        audio: true,
+      });
+
+      stream.getTracks().forEach((track) => track.stop());
+    } catch (error) {
+      console.warn("Camera/microphone permission was not granted.", error);
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
+      const authUrl = `${getApiUrl()}/api/auth/login`;
+      const response = await fetch(authUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accountId, password }),
@@ -23,7 +41,18 @@ export default function Home() {
         throw new Error(body.error || "Login failed.");
       }
       const data = await response.json();
-      localStorage.setItem("authToken", data.token);
+      setAuthToken(data.token);
+
+      const meResponse = await authFetch(`${getApiUrl()}/api/auth/me`);
+      if (meResponse.ok) {
+        // request camera/microphone permission once at login
+        try {
+          await initMediaStream();
+        } catch (e) {
+          // ignore failures; do not block login
+        }
+      }
+
       window.location.href = "/dashboard";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to login.");
@@ -90,183 +119,4 @@ export default function Home() {
     </main>
   );
 }
-              <div>
-                <strong>Total Cards</strong>
-                <div>{status?.statistics.total_cards ?? 0}</div>
-              </div>
-              <div>
-                <strong>Processed</strong>
-                <div>{status?.statistics.processed ?? 0}</div>
-              </div>
-              <div>
-                <strong>Marked</strong>
-                <div>{status?.statistics.marked ?? 0}</div>
-              </div>
-              <div>
-                <strong>Already Marked</strong>
-                <div>{status?.statistics.already_marked ?? 0}</div>
-              </div>
-              <div>
-                <strong>Needs Review</strong>
-                <div>{status?.statistics.needs_review ?? 0}</div>
-              </div>
-              <div>
-                <strong>Failed</strong>
-                <div>{status?.statistics.failed ?? 0}</div>
-              </div>
-            </div>
-          </div>
 
-          <div className="card section">
-            <h2>Upload Member Sheet</h2>
-            <div className="input-file" onClick={() => document.getElementById("sheet-upload")?.click()}>
-              <input
-                type="file"
-                id="sheet-upload"
-                accept=".csv,.xlsx,.xls"
-                onChange={(event) => setSelectedSheet(event.target.files?.[0] ?? null)}
-              />
-              {selectedSheet ? selectedSheet.name : "Click here to select a .csv, .xlsx, or .xls file"}
-            </div>
-            <button className="button" onClick={uploadSheet} disabled={!selectedSheet || loading}>
-              Upload Sheet
-            </button>
-            {sheetInfo && (
-              <div className="notification">
-                <p><strong>File:</strong> {sheetFileName}</p>
-                <p><strong>Members:</strong> {sheetInfo.members}</p>
-                <p><strong>Name Column:</strong> {sheetInfo.name_column}</p>
-                <p><strong>Month Columns:</strong> {sheetInfo.month_columns.join(", ")}</p>
-              </div>
-            )}
-          </div>
-
-          <div className="card section">
-            <h2>Upload Card Images</h2>
-            <div className="input-file" onClick={() => document.getElementById("cards-upload")?.click()}>
-              <input
-                type="file"
-                id="cards-upload"
-                accept=".jpg,.jpeg,.png,.webp"
-                multiple
-                onChange={(event) => setSelectedCards(Array.from(event.target.files ?? []))}
-              />
-              {selectedCards.length > 0
-                ? selectedCards.map((file) => file.name).join(", ")
-                : "Drag and drop or click to select card images"}
-            </div>
-            <button className="button" onClick={uploadCards} disabled={!selectedCards.length || loading || !sheetInfo}>
-              Upload Cards
-            </button>
-            <div className="notification">
-              {cards.length > 0 ? (
-                <>
-                  <strong>Queued cards:</strong> {cards.map((card) => card.filename).join(", ")}
-                </>
-              ) : (
-                "No cards uploaded yet."
-              )}
-            </div>
-          </div>
-
-          <div className="card section">
-            <h2>Process Cards</h2>
-            <button className="button" onClick={processCards} disabled={loading || !cards.length}>
-              {loading ? "Processing..." : "Start OCR Processing"}
-            </button>
-          </div>
-
-          <div className="card section">
-            <h2>Processing Table</h2>
-            <div className="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Card</th>
-                    <th>Detected Name</th>
-                    <th>Detected Month</th>
-                    <th>Matched Name</th>
-                    <th>Confidence</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.map((result) => (
-                    <tr key={`${result.card}-${result.status}`}>
-                      <td>{result.card}</td>
-                      <td>{result.detected_name ?? "—"}</td>
-                      <td>{result.detected_month ?? "—"}</td>
-                      <td>{result.matched_name ?? "—"}</td>
-                      <td>{Math.round(result.confidence * 100)}%</td>
-                      <td>
-                        <span className={`status-chip status-${result.status.replace(/ /g, "\\ ")}`}>
-                          {result.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {results.some((item) => item.status === "Needs Review") && (
-            <div className="card section">
-              <h2>Review Required</h2>
-              {results.filter((item) => item.status === "Needs Review").map((result) => (
-                <div key={result.card} className="review-card">
-                  <div>
-                    <strong>{result.card}</strong> — {result.message}
-                  </div>
-                  <p><strong>OCR Text:</strong></p>
-                  <pre>{result.raw_text}</pre>
-                  <div className="tag-list">
-                    <div className="card-chip">Detected Name: {result.detected_name ?? "Unknown"}</div>
-                    <div className="card-chip">Detected Month: {result.detected_month ?? "Unknown"}</div>
-                  </div>
-                  <div>
-                    <strong>Possible matches:</strong>
-                    <div className="tag-list">
-                      {result.possible_matches?.map((match) => (
-                        <button
-                          key={match.matched_name}
-                          className={`card-chip ${confirmMatchName === match.matched_name ? "selected" : ""}`}
-                          type="button"
-                          onClick={() => {
-                            setReviewCard(result);
-                            setConfirmMatchName(match.matched_name);
-                            setConfirmMonth(result.detected_month || "");
-                          }}
-                        >
-                          {match.matched_name} — {Math.round(match.confidence * 100)}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="field-group">
-                    <input
-                      value={confirmMatchName}
-                      onChange={(event) => setConfirmMatchName(event.target.value)}
-                      placeholder="Confirm member name"
-                    />
-                    <select value={confirmMonth} onChange={(event) => setConfirmMonth(event.target.value)}>
-                      <option value="">Select month</option>
-                      {months.map((month) => (
-                        <option key={month} value={month}>{month}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <button className="button" onClick={handleConfirm} disabled={!confirmMatchName || !confirmMonth || loading}>
-                    Confirm Review
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {notification && <div className="notification">{notification}</div>}
-    </div>
-  );
-}
