@@ -1,5 +1,5 @@
 ﻿export const getApiUrl = () =>
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_URL || "/api";
 
 export const getAuthToken = () =>
   typeof window !== "undefined"
@@ -60,3 +60,4 @@ export const fetcher = async (url: string) => {
 
   return response.json();
 };
+
