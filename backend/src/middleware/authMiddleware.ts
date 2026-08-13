@@ -11,7 +11,9 @@ export interface AuthorizedRequest extends Request {
     id: number;
     accountId: string;
     roles: string[];
+    permissions: string[];
     isOwner: boolean;
+    deviceIdentifier?: string;
   };
 }
 
@@ -23,7 +25,14 @@ export function authenticate(req: AuthorizedRequest, res: Response, next: NextFu
   const token = authHeader.split(" ")[1];
   try {
     const verified = jwt.verify(token, secret) as any;
-    req.user = { id: verified.id, accountId: verified.accountId, roles: verified.roles || [], isOwner: verified.isOwner || false };
+    req.user = {
+      id: verified.id,
+      accountId: verified.accountId,
+      roles: verified.roles || [],
+      permissions: verified.permissions || [],
+      isOwner: verified.isOwner || false,
+      deviceIdentifier: verified.deviceIdentifier,
+    };
     return next();
   } catch {
     return res.status(401).json({ error: "Invalid token" });
@@ -47,14 +56,31 @@ export function requireRole(roleName: string) {
 
 export function requireAnyRole(roleNames: string[]) {
   return (req: AuthorizedRequest, res: Response, next: NextFunction) => {
-    if (!req.user) {
+    const user = req.user;
+    if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
-    if (req.user.isOwner) {
+    if (user.isOwner) {
       return next();
     }
-    const hasRole = roleNames.some((role) => req.user?.roles.includes(role));
+    const hasRole = roleNames.some((role) => user.roles.includes(role));
     if (hasRole) {
+      return next();
+    }
+    return res.status(403).json({ error: "Forbidden" });
+  };
+}
+
+export function requirePermission(permissionName: string) {
+  return (req: AuthorizedRequest, res: Response, next: NextFunction) => {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (user.isOwner) {
+      return next();
+    }
+    if (user.permissions.includes(permissionName)) {
       return next();
     }
     return res.status(403).json({ error: "Forbidden" });

@@ -1,0 +1,89 @@
+{
+  "users": [
+    {
+      "id": 2,
+      "accountId": "member01",
+      "email": "member01@zahira.edu.lk",
+      "fullName": "Demo Member",
+      "passwordHash": "$2b$12$8Q8VJ35YYcVyczm8BUAELOVtCgQSYi9NXeN5SvkTJ82jxCQM5rhZm",
+      "status": "ACTIVE",
+      "isOwner": false,
+      "forcePasswordReset": true,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": null,
+      "createdAt": "2026-08-12T13:57:52.981Z",
+      "updatedAt": "2026-08-12T13:57:52.981Z",
+      "memberProfile": {
+        "id": 1,
+        "memberId": "RC001",
+        "userId": 2,
+        "fullName": "Demo Member",
+        "grade": "Grade 10",
+        "position": "Reader",
+        "status": "ACTIVE",
+        "photoUrl": null,
+        "customFields": null,
+        "createdAt": "2026-08-12T13:57:52.981Z",
+        "updatedAt": "2026-08-12T13:57:52.981Z",
+        "archivedAt": null
+      },
+      "roles": [
+        {
+          "id": 2,
+          "userId": 2,
+          "roleId": 5,
+          "role": {
+            "id": 5,
+            "name": "MEMBER",
+            "label": "Member"
+          }
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "accountId": "owner",
+      "email": "owner@zahira.edu.lk",
+      "fullName": "System Owner",
+      "passwordHash": "$2b$12$8Q8VJ35YYcVyczm8BUAELOVtCgQSYi9NXeN5SvkTJ82jxCQM5rhZm",
+      "status": "ACTIVE",
+      "isOwner": true,
+      "forcePasswordReset": true,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": "2026-08-12T14:04:50.827Z",
+      "createdAt": "2026-08-12T13:57:52.963Z",
+      "updatedAt": "2026-08-12T15:52:04.383Z",
+      "memberProfile": null,
+      "roles": [
+        {
+          "id": 1,
+          "userId": 1,
+          "roleId": 1,
+          "role": {
+            "id": 1,
+            "name": "OWNER",
+            "label": "Owner"
+          }
+        }
+      ]
+    }
+  ],
+  "members": [
+    {
+      "id": 1,
+      "memberId": "RC001",
+      "userId": 2,
+      "fullName": "Demo Member",
+      "grade": "Grade 10",
+      "position": "Reader",
+      "status": "ACTIVE",
+      "photoUrl": null,
+      "customFields": null,
+      "createdAt": "2026-08-12T13:57:52.981Z",
+      "updatedAt": "2026-08-12T13:57:52.981Z",
+      "archivedAt": null
+    }
+  ]
+}

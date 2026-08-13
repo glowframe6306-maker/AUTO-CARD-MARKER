@@ -61,9 +61,12 @@ router.post("/upload", requireAnyRole(["OWNER", "SUPER_ADMIN", "ADMINISTRATOR", 
   });
   const memberMatch = fields.detectedName ? await findMemberByName(fields.detectedName) : null;
   if (memberMatch && fields.detectedMonth && fields.detectedAmount && memberMatch.member) {
-    const duplicate = await isDuplicatePayment(memberMatch.member.id, memberMatch.yearId, memberMatch.month);
-    if (duplicate) {
-      await prisma.cardUpload.update({ where: { id: upload.id }, data: { duplicateWarning: true } });
+    const monthNumber = convertMonth(fields.detectedMonth);
+    if (monthNumber) {
+      const duplicate = await isDuplicatePayment(memberMatch.member.id, memberMatch.yearId, monthNumber);
+      if (duplicate) {
+        await prisma.cardUpload.update({ where: { id: upload.id }, data: { duplicateWarning: true } });
+      }
     }
   }
   return res.status(201).json({ upload, ocr: cardOcr, memberMatch });

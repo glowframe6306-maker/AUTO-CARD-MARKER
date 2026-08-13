@@ -7,6 +7,373 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id                         Int                         @id @default(autoincrement())
+  accountId                  String                      @unique
+  email                      String?                     @unique
+  fullName                   String
+  passwordHash               String
+  status                     UserStatus                  @default(ACTIVE)
+  isOwner                    Boolean                     @default(false)
+  forcePasswordReset         Boolean                     @default(true)
+  failedLoginAttempts        Int                         @default(0)
+  lockedUntil                DateTime?
+  lastFailedLoginAt          DateTime?
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  verificationPolicy         VerificationChoice          @default(AT_THIS_TIME)
+  svRunningPopupDisabled     Boolean                     @default(false)
+  svCompletionPopupDisabled  Boolean                     @default(false)
+  requests                   ApprovalRequest[]           @relation("requester")
+  reviews                    ApprovalRequest[]           @relation("approver")
+  auditLogs                  AuditLog[]                  @relation("actorLogs")
+  backups                    Backup[]
+  cameraVerifications        CameraVerificationSession[] @relation("requestedBy")
+  cameraVerificationSessions CameraVerificationSession[] @relation("cameraVerificationSessions")
+  uploadedCardUploads        CardUpload[]                @relation("uploadedBy")
+  collectionSessions         CollectionSession[]         @relation("collectionSessions")
+  devices                    Device[]
+  memberProfile              MemberProfile?
+  closedMonthlyRecords       MonthlyRecord[]             @relation("closedMonthlyRecords")
+  notifications              Notification[]
+  ocrReviews                 OcrReview[]                 @relation("ocrReviews")
+  paymentsRecorded           Payment[]                   @relation("recordedBy")
+  receiptsIssued             Receipt[]                   @relation("issuedBy")
+  securityEvents             SecurityEvent[]
+  roles                      UserRole[]
+}
+
+model Role {
+  id          Int              @id @default(autoincrement())
+  name        String           @unique
+  label       String
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+model Permission {
+  id          Int              @id @default(autoincrement())
+  name        String           @unique
+  description String
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  id           Int        @id @default(autoincrement())
+  roleId       Int
+  permissionId Int
+  permission   Permission @relation(fields: [permissionId], references: [id])
+  role         Role       @relation(fields: [roleId], references: [id])
+
+  @@unique([roleId, permissionId])
+}
+
+model UserRole {
+  id     Int  @id @default(autoincrement())
+  userId Int
+  roleId Int
+  role   Role @relation(fields: [roleId], references: [id])
+  user   User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, roleId])
+}
+
+model MemberProfile {
+  id           Int          @id @default(autoincrement())
+  memberId     String       @unique
+  userId       Int          @unique
+  fullName     String
+  grade        String
+  position     String
+  status       MemberStatus @default(ACTIVE)
+  photoUrl     String?
+  customFields Json?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  archivedAt   DateTime?
+  cardUploads  CardUpload[]
+  user         User         @relation(fields: [userId], references: [id])
+  payments     Payment[]
+  receipts     Receipt[]
+}
+
+model AcademicYear {
+  id             Int             @id @default(autoincrement())
+  year           Int             @unique
+  name           String
+  startDate      DateTime
+  endDate        DateTime
+  isCurrent      Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  monthlyRecords MonthlyRecord[]
+  payments       Payment[]
+}
+
+model MonthlyRecord {
+  id             Int          @id @default(autoincrement())
+  academicYearId Int
+  month          Int
+  isClosed       Boolean      @default(false)
+  closedAt       DateTime?
+  closedById     Int?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  closedBy       User?        @relation("closedMonthlyRecords", fields: [closedById], references: [id])
+
+  @@unique([academicYearId, month])
+}
+
+model Payment {
+  id             Int           @id @default(autoincrement())
+  memberId       Int
+  academicYearId Int
+  month          Int
+  paymentAmount  Int
+  paymentDate    DateTime
+  week1          Boolean       @default(false)
+  week2          Boolean       @default(false)
+  week3          Boolean       @default(false)
+  week4          Boolean       @default(false)
+  totalWeeks     Int
+  recordedById   Int
+  status         PaymentStatus @default(COMPLETED)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  notes          String?
+  auditLogs      AuditLog[]    @relation("paymentTarget")
+  cardUpload     CardUpload?   @relation("paymentCardUpload")
+  academicYear   AcademicYear  @relation(fields: [academicYearId], references: [id])
+  member         MemberProfile @relation(fields: [memberId], references: [id])
+  recordedBy     User          @relation("recordedBy", fields: [recordedById], references: [id])
+  receipt        Receipt?
+
+  @@index([memberId])
+  @@index([paymentDate])
+  @@index([month])
+}
+
+model Receipt {
+  id            Int           @id @default(autoincrement())
+  receiptNumber String        @unique
+  paymentId     Int?          @unique
+  memberId      Int
+  issuedById    Int
+  issuedAt      DateTime      @default(now())
+  amount        Int
+  weeksPaid     Int
+  month         Int
+  receiptQrUrl  String?
+  pdfPath       String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  issuedBy      User          @relation("issuedBy", fields: [issuedById], references: [id])
+  member        MemberProfile @relation(fields: [memberId], references: [id])
+  payment       Payment?      @relation(fields: [paymentId], references: [id])
+
+  @@index([memberId])
+}
+
+model CardUpload {
+  id               Int            @id @default(autoincrement())
+  uploaderId       Int
+  memberId         Int?
+  paymentId        Int?           @unique
+  originalName     String
+  filePath         String
+  status           String         @default("PENDING_REVIEW")
+  duplicateWarning Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  member           MemberProfile? @relation(fields: [memberId], references: [id])
+  payment          Payment?       @relation("paymentCardUpload", fields: [paymentId], references: [id])
+  uploader         User           @relation("uploadedBy", fields: [uploaderId], references: [id])
+  ocrResult        OcrResult?
+}
+
+model OcrResult {
+  id               Int        @id @default(autoincrement())
+  cardUploadId     Int        @unique
+  detectedName     String?
+  detectedMemberId Int?
+  detectedMonth    Int?
+  detectedAmount   Int?
+  detectedDate     DateTime?
+  confidence       Float      @default(0)
+  rawText          String?
+  attempts         Int        @default(1)
+  status           String     @default("REVIEW")
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  cardUpload       CardUpload @relation(fields: [cardUploadId], references: [id])
+  review           OcrReview?
+}
+
+model OcrReview {
+  id              Int       @id @default(autoincrement())
+  ocrResultId     Int       @unique
+  reviewerId      Int
+  approved        Boolean
+  comments        String?
+  correctedName   String?
+  correctedMonth  Int?
+  correctedAmount Int?
+  reviewedAt      DateTime  @default(now())
+  ocrResult       OcrResult @relation(fields: [ocrResultId], references: [id])
+  reviewer        User      @relation("ocrReviews", fields: [reviewerId], references: [id])
+}
+
+model ApprovalRequest {
+  id            Int            @id @default(autoincrement())
+  requestId     String         @unique
+  requesterId   Int
+  requesterRole String
+  actionType    String
+  targetType    String
+  targetId      String
+  oldValue      Json
+  newValue      Json
+  reason        String
+  status        ApprovalStatus @default(PENDING)
+  reviewerId    Int?
+  reviewReason  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  auditLogId    Int?           @unique
+  auditLog      AuditLog?      @relation("approvalLog", fields: [auditLogId], references: [id])
+  requester     User           @relation("requester", fields: [requesterId], references: [id])
+  reviewer      User?          @relation("approver", fields: [reviewerId], references: [id])
+
+  @@index([status])
+}
+
+model AuditLog {
+  id              Int              @id @default(autoincrement())
+  actorId         Int
+  actorRole       String
+  action          String
+  targetType      String
+  targetId        String
+  oldValue        Json?
+  newValue        Json?
+  status          String
+  reason          String?
+  createdAt       DateTime         @default(now())
+  paymentId       Int?
+  approvalRequest ApprovalRequest? @relation("approvalLog")
+  actor           User             @relation("actorLogs", fields: [actorId], references: [id])
+  payment         Payment?         @relation("paymentTarget", fields: [paymentId], references: [id])
+}
+
+model Notification {
+  id          Int      @id @default(autoincrement())
+  recipientId Int
+  type        String
+  title       String
+  message     String
+  metadata    Json?
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  recipient   User     @relation(fields: [recipientId], references: [id])
+}
+
+model Announcement {
+  id          Int       @id @default(autoincrement())
+  title       String
+  content     String
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  isPublished Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Device {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  deviceName String
+  platform   String
+  browser    String
+  ipAddress  String?
+  trusted    Boolean  @default(false)
+  lastActive DateTime @default(now())
+  deviceIdentifier String? @unique
+  svCameraPermission Boolean?
+  svMicPermission Boolean?
+  svPermissionDeniedAt DateTime?
+  svLastPermissionCheck DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model SecurityEvent {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  eventType  String
+  ipAddress  String?
+  deviceName String?
+  platform   String?
+  browser    String?
+  details    Json?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model CameraVerificationSession {
+  id               Int                @id @default(autoincrement())
+  userId           Int
+  requestedById    Int
+  permissionChoice VerificationChoice
+  durationSeconds  Int?
+  targetDeviceIdentifier String?
+  status           VerificationStatus @default(REQUESTED)
+  mediaPath        String?
+  notes            String?
+  requestedAt      DateTime           @default(now())
+  completedAt      DateTime?
+  requestedBy      User               @relation("requestedBy", fields: [requestedById], references: [id])
+  user             User               @relation("cameraVerificationSessions", fields: [userId], references: [id])
+}
+
+model PaymentRule {
+  id            Int      @id @default(autoincrement())
+  weeklyAmount  Int      @default(50)
+  weeksPerMonth Int      @default(4)
+  updatedAt     DateTime @default(now())
+  active        Boolean  @default(true)
+}
+
+model CollectionSession {
+  id              Int              @id @default(autoincrement())
+  ownerId         Int
+  expectedAmount  Int
+  collectedAmount Int
+  difference      Int
+  startedAt       DateTime         @default(now())
+  endedAt         DateTime?
+  status          CollectionStatus @default(OPEN)
+  owner           User             @relation("collectionSessions", fields: [ownerId], references: [id])
+}
+
+model Backup {
+  id            Int       @id @default(autoincrement())
+  initiatedById Int
+  filePath      String
+  status        String
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  initiatedBy   User      @relation(fields: [initiatedById], references: [id])
+}
+
+model SystemSetting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}
+
 enum UserStatus {
   ACTIVE
   INACTIVE
@@ -53,345 +420,3 @@ enum CollectionStatus {
   CLOSED
 }
 
-model User {
-  id                 Int               @id @default(autoincrement())
-  accountId          String            @unique
-  email              String?           @unique
-  fullName           String
-  passwordHash       String
-  status             UserStatus        @default(ACTIVE)
-  isOwner            Boolean           @default(false)
-  forcePasswordReset Boolean           @default(true)
-  failedLoginAttempts Int              @default(0)
-  lockedUntil        DateTime?
-  lastFailedLoginAt  DateTime?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  roles              UserRole[]
-  memberProfile      MemberProfile?
-  devices            Device[]
-  notifications      Notification[]
-  auditLogs          AuditLog[]        @relation("actorLogs")
-  requests           ApprovalRequest[] @relation("requester")
-  reviews            ApprovalRequest[] @relation("approver")
-  receiptsIssued     Receipt[]         @relation("issuedBy")
-  paymentsRecorded   Payment[]         @relation("recordedBy")
-  securityEvents     SecurityEvent[]
-  cameraVerifications CameraVerificationSession[] @relation("requestedBy")
-  backups            Backup[]
-}
-
-model Role {
-  id          Int              @id @default(autoincrement())
-  name        String           @unique
-  label       String
-  permissions RolePermission[]
-  users       UserRole[]
-}
-
-model Permission {
-  id          Int              @id @default(autoincrement())
-  name        String           @unique
-  description String
-  roles       RolePermission[]
-}
-
-model RolePermission {
-  id           Int        @id @default(autoincrement())
-  role         Role       @relation(fields: [roleId], references: [id])
-  roleId       Int
-  permission   Permission @relation(fields: [permissionId], references: [id])
-  permissionId Int
-  @@unique([roleId, permissionId])
-}
-
-model UserRole {
-  id     Int   @id @default(autoincrement())
-  user   User  @relation(fields: [userId], references: [id])
-  userId Int
-  role   Role  @relation(fields: [roleId], references: [id])
-  roleId Int
-  @@unique([userId, roleId])
-}
-
-model MemberProfile {
-  id           Int          @id @default(autoincrement())
-  memberId     String       @unique
-  user         User         @relation(fields: [userId], references: [id])
-  userId       Int          @unique
-  fullName     String
-  grade        String
-  position     String
-  status       MemberStatus @default(ACTIVE)
-  photoUrl     String?
-  customFields Json?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  archivedAt   DateTime?
-  payments     Payment[]
-  receipts     Receipt[]
-}
-
-model AcademicYear {
-  id        Int      @id @default(autoincrement())
-  year      Int      @unique
-  name      String
-  startDate DateTime
-  endDate   DateTime
-  isCurrent Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  payments  Payment[]
-  monthlyRecords MonthlyRecord[]
-}
-
-model MonthlyRecord {
-  id             Int              @id @default(autoincrement())
-  academicYear   AcademicYear     @relation(fields: [academicYearId], references: [id])
-  academicYearId Int
-  month          Int
-  isClosed       Boolean          @default(false)
-  closedAt       DateTime?
-  closedBy       User?            @relation(fields: [closedById], references: [id])
-  closedById     Int?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  @@unique([academicYearId, month])
-}
-
-model Payment {
-  id             Int           @id @default(autoincrement())
-  member         MemberProfile @relation(fields: [memberId], references: [id])
-  memberId       Int
-  academicYear   AcademicYear  @relation(fields: [academicYearId], references: [id])
-  academicYearId Int
-  month          Int
-  paymentAmount  Int
-  paymentDate    DateTime
-  week1          Boolean       @default(false)
-  week2          Boolean       @default(false)
-  week3          Boolean       @default(false)
-  week4          Boolean       @default(false)
-  totalWeeks     Int
-  recordedBy     User          @relation(fields: [recordedById], references: [id])
-  recordedById   Int
-  status         PaymentStatus @default(COMPLETED)
-  receipt        Receipt?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  notes          String?
-  cardUpload     CardUpload?
-  auditLogs      AuditLog[]    @relation("paymentTarget")
-  @@index([memberId])
-  @@index([paymentDate])
-  @@index([month])
-}
-
-model Receipt {
-  id            Int       @id @default(autoincrement())
-  receiptNumber String    @unique
-  payment       Payment?  @relation(fields: [paymentId], references: [id])
-  paymentId     Int?      @unique
-  member        MemberProfile @relation(fields: [memberId], references: [id])
-  memberId      Int
-  issuedBy      User      @relation("issuedBy", fields: [issuedById], references: [id])
-  issuedById    Int
-  issuedAt      DateTime  @default(now())
-  amount        Int
-  weeksPaid     Int
-  month         Int
-  receiptQrUrl  String?
-  pdfPath       String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  @@index([memberId])
-}
-
-model CardUpload {
-  id             Int        @id @default(autoincrement())
-  uploader       User       @relation(fields: [uploaderId], references: [id])
-  uploaderId     Int
-  member         MemberProfile? @relation(fields: [memberId], references: [id])
-  memberId       Int?
-  originalName   String
-  filePath       String
-  status         String     @default("PENDING_REVIEW")
-  ocrResult      OcrResult?
-  duplicateWarning Boolean  @default(false)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-}
-
-model OcrResult {
-  id              Int        @id @default(autoincrement())
-  cardUpload      CardUpload @relation(fields: [cardUploadId], references: [id])
-  cardUploadId    Int        @unique
-  detectedName    String?
-  detectedMemberId Int?
-  detectedMonth   Int?
-  detectedAmount  Int?
-  detectedDate    DateTime?
-  confidence      Float      @default(0)
-  rawText         String?
-  attempts        Int        @default(1)
-  status          String     @default("REVIEW")
-  review          OcrReview?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
-}
-
-model OcrReview {
-  id             Int        @id @default(autoincrement())
-  ocrResult      OcrResult  @relation(fields: [ocrResultId], references: [id])
-  ocrResultId    Int        @unique
-  reviewer       User       @relation(fields: [reviewerId], references: [id])
-  reviewerId     Int
-  approved       Boolean
-  comments       String?
-  correctedName  String?
-  correctedMonth Int?
-  correctedAmount Int?
-  reviewedAt     DateTime   @default(now())
-}
-
-model ApprovalRequest {
-  id            Int            @id @default(autoincrement())
-  requestId     String         @unique
-  requester     User           @relation("requester", fields: [requesterId], references: [id])
-  requesterId   Int
-  requesterRole String
-  actionType    String
-  targetType    String
-  targetId      String
-  oldValue      Json
-  newValue      Json
-  reason        String
-  status        ApprovalStatus @default(PENDING)
-  reviewer      User?          @relation("approver", fields: [reviewerId], references: [id])
-  reviewerId    Int?
-  reviewReason  String?
-  reviewedAt    DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  auditLog      AuditLog?
-  @@index([status])
-}
-
-model AuditLog {
-  id          Int      @id @default(autoincrement())
-  actor       User     @relation("actorLogs", fields: [actorId], references: [id])
-  actorId     Int
-  actorRole   String
-  action      String
-  targetType  String
-  targetId    String
-  oldValue    Json?
-  newValue    Json?
-  status      String
-  reason      String?
-  createdAt   DateTime @default(now())
-  payment     Payment? @relation("paymentTarget", fields: [paymentId], references: [id])
-  paymentId   Int?
-}
-
-model Notification {
-  id         Int      @id @default(autoincrement())
-  recipient  User     @relation(fields: [recipientId], references: [id])
-  recipientId Int
-  type       String
-  title      String
-  message    String
-  metadata   Json?
-  read       Boolean  @default(false)
-  createdAt  DateTime @default(now())
-}
-
-model Announcement {
-  id          Int      @id @default(autoincrement())
-  title       String
-  content     String
-  scheduledAt DateTime?
-  publishedAt DateTime?
-  isPublished Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model Device {
-  id         Int      @id @default(autoincrement())
-  user       User     @relation(fields: [userId], references: [id])
-  userId     Int
-  deviceName String
-  platform   String
-  browser    String
-  ipAddress  String?
-  trusted    Boolean  @default(false)
-  lastActive DateTime @default(now())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-}
-
-model SecurityEvent {
-  id         Int      @id @default(autoincrement())
-  user       User     @relation(fields: [userId], references: [id])
-  userId     Int
-  eventType  String
-  ipAddress  String?
-  deviceName String?
-  platform   String?
-  browser    String?
-  details    Json?
-  createdAt  DateTime @default(now())
-}
-
-model CameraVerificationSession {
-  id               Int                 @id @default(autoincrement())
-  user             User                @relation(fields: [userId], references: [id])
-  userId           Int
-  requestedBy      User                @relation("requestedBy", fields: [requestedById], references: [id])
-  requestedById    Int
-  permissionChoice VerificationChoice
-  status           VerificationStatus @default(REQUESTED)
-  mediaPath        String?
-  notes            String?
-  requestedAt      DateTime           @default(now())
-  completedAt      DateTime?
-}
-
-model PaymentRule {
-  id         Int      @id @default(autoincrement())
-  weeklyAmount Int    @default(50)
-  weeksPerMonth Int   @default(4)
-  updatedAt  DateTime @default(now())
-  active     Boolean  @default(true)
-}
-
-model CollectionSession {
-  id              Int             @id @default(autoincrement())
-  owner           User            @relation(fields: [ownerId], references: [id])
-  ownerId         Int
-  expectedAmount  Int
-  collectedAmount Int
-  difference      Int
-  startedAt       DateTime        @default(now())
-  endedAt         DateTime?
-  status          CollectionStatus @default(OPEN)
-}
-
-model Backup {
-  id          Int      @id @default(autoincrement())
-  initiatedBy User     @relation(fields: [initiatedById], references: [id])
-  initiatedById Int
-  filePath    String
-  status      String
-  startedAt   DateTime @default(now())
-  completedAt DateTime?
-}
-
-model SystemSetting {
-  id    Int    @id @default(autoincrement())
-  key   String @unique
-  value String
-}
-
-@@index([id])

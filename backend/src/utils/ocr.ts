@@ -2,7 +2,6 @@ import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 import nodeTesseract from "node-tesseract-ocr";
-import { CardUpload, OcrResult } from "@prisma/client";
 import prisma from "../prisma";
 
 const OCR_OPTIONS = {

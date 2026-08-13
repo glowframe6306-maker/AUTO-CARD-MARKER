@@ -1,5 +1,6 @@
 import { Router } from "express";
 import prisma from "../prisma";
+import { Prisma } from "@prisma/client";
 import { authenticate, requireAnyRole, AuthorizedRequest } from "../middleware/authMiddleware";
 
 const router = Router();
@@ -45,6 +46,30 @@ router.get("/pending", requireAnyRole(["OWNER"]), async (req, res) => {
   return res.json(approvals);
 });
 
+async function applyApproval(approval: any) {
+  const { targetType, targetId, newValue } = approval;
+  if (!approval || approval.status !== "PENDING") return;
+  switch (targetType) {
+    case "MEMBER":
+      await prisma.memberProfile.update({ where: { memberId: targetId }, data: newValue });
+      if (newValue.fullName || newValue.email) {
+        const member = await prisma.memberProfile.findUnique({ where: { memberId: targetId } });
+        if (member) {
+          await prisma.user.update({ where: { id: member.userId }, data: { fullName: newValue.fullName || undefined, email: newValue.email || undefined } });
+        }
+      }
+      break;
+    case "USER":
+      await prisma.user.update({ where: { accountId: targetId }, data: newValue });
+      break;
+    case "ANNOUNCEMENT":
+      await prisma.announcement.update({ where: { id: Number(targetId) }, data: newValue });
+      break;
+    default:
+      break;
+  }
+}
+
 router.post("/review/:requestId", requireAnyRole(["OWNER"]), async (req: AuthorizedRequest, res) => {
   const { approved, reviewReason } = req.body;
   const approval = await prisma.approvalRequest.findUnique({ where: { requestId: req.params.requestId } });
@@ -58,6 +83,11 @@ router.post("/review/:requestId", requireAnyRole(["OWNER"]), async (req: Authori
     reviewedAt: new Date(),
   };
   await prisma.approvalRequest.update({ where: { requestId: req.params.requestId }, data: updateData });
+
+  if (approved) {
+    await applyApproval(approval);
+  }
+
   await prisma.auditLog.create({
     data: {
       actorId: req.user!.id,
@@ -67,6 +97,8 @@ router.post("/review/:requestId", requireAnyRole(["OWNER"]), async (req: Authori
       targetId: approval.targetId,
       status: approved ? "APPROVED" : "REJECTED",
       reason: reviewReason,
+      oldValue: approval.oldValue as Prisma.InputJsonValue,
+      newValue: approved ? (approval.newValue as Prisma.InputJsonValue) : undefined,
     },
   });
   return res.json({ message: `Request ${approved ? "approved" : "rejected"}.` });
