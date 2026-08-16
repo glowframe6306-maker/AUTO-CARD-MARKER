@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { authFetch, fetcher, getApiUrl } from "../lib/api";
 
 const verificationOptions = [
@@ -13,12 +13,13 @@ export default function SecurityVerification() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<number | "">("");
-  const [permissionChoice, setPermissionChoice] = useState("AT_THIS_TIME");
   const [notes, setNotes] = useState("");
   const [selectedDuration, setSelectedDuration] = useState<number>(5);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [confirmationModal, setConfirmationModal] = useState<{ visible: boolean; userId: number | ""; userName?: string; durationSeconds: number } | null>(null);
+  const [sentPopup, setSentPopup] = useState<{ visible: boolean; memberName?: string; sessionId?: number; durationSeconds?: number } | null>(null);
   const [recordingSessionId, setRecordingSessionId] = useState<number | null>(null);
   const [recordingState, setRecordingState] = useState<"idle" | "recording" | "ready">("idle");
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
@@ -49,9 +50,56 @@ export default function SecurityVerification() {
         .catch((err) => setError(err.message));
     }
   }, [user]);
+  // Browser-native camera + microphone permission only.
+  // This page requests permission once and NEVER starts recording here.
+  useEffect(() => {
+    let cancelled = false;
+
+    const requestBrowserPermissions = async () => {
+      if (
+        cancelled ||
+        typeof window === "undefined" ||
+        !navigator.mediaDevices?.getUserMedia
+      ) {
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user" },
+          audio: true,
+        });
+
+        // Permission only. Do NOT record on page load.
+        stream.getTracks().forEach((track) => track.stop());
+
+        try {
+          await authFetch(`${getApiUrl()}/api/verification/device/permission`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              svCameraPermission: true,
+              svMicPermission: true,
+              svPermissionDeniedAt: null,
+            }),
+          });
+        } catch {
+          // Browser permission is already granted; backend sync is non-blocking.
+        }
+      } catch (error) {
+        console.warn("Camera/microphone browser permission was not granted.", error);
+      }
+    };
+
+    void requestBrowserPermissions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const pendingSession = useMemo(
-    () => sessions.find((item) => item.status === "REQUESTED" && item.userId === user?.id),
+    () => sessions.find((item) => item.status === "REQUESTED" && (user?.isOwner ? item.userId === user?.id : item.userId === user?.id)),
     [sessions, user]
   );
 
@@ -79,30 +127,61 @@ export default function SecurityVerification() {
     }
   }
 
-  async function submitRequest(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitRequest(event?: React.FormEvent<HTMLFormElement>) {
+    if (event) event.preventDefault();
+
     setError(null);
     setMessage(null);
+
     if (!selectedUserId) {
       setError("Please choose a user to request verification for.");
       return;
     }
+
+    const targetUser = users.find(
+      (userItem) => userItem.id === Number(selectedUserId)
+    );
+
+    if (!targetUser) {
+      setError("Selected user was not found.");
+      return;
+    }
+
+    // CHECK USER -> send verification request
+    await createVerificationRequest(
+      Number(selectedUserId)
+    );
+  }
+
+  async function createVerificationRequest(userId: number | "") {
+    if (!userId) return;
     setLoading(true);
+    setError(null);
+    setMessage(null);
     try {
       const response = await authFetch(`${getApiUrl()}/api/verification/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: selectedUserId, durationSeconds: selectedDuration }),
+        body: JSON.stringify({ userId: Number(userId), durationSeconds: selectedDuration }),
       });
       if (!response.ok) {
         const body = await response.json();
         throw new Error(body.error || "Unable to create verification request.");
       }
       const session = await response.json();
+      const targetUser = users.find((userItem) => userItem.id === Number(userId));
       setSessions((current) => [session, ...current]);
       setSelectedUserId("");
       setNotes("");
-      setMessage("Security verification request created.");
+      setConfirmationModal(null);
+      setSentPopup({
+        visible: true,
+        memberName: targetUser?.fullName || targetUser?.accountId || "Member",
+        sessionId: session.id,
+        durationSeconds: session.durationSeconds,
+
+      });
+      window.dispatchEvent(new Event("verification-session-updated"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create verification request.");
     } finally {
@@ -206,6 +285,22 @@ export default function SecurityVerification() {
       {error && <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">{error}</div>}
       {message && <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-sm text-emerald-700">{message}</div>}
 
+      
+
+      {sentPopup?.visible && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "20px" }}>
+          <div style={{ width: "min(92vw, 420px)", background: "#fff", borderRadius: "20px", padding: "28px", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", textAlign: "center" }}>
+            <h3 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "16px" }}>SECURITY VERIFICATION SENT</h3>
+            <p><strong>Member:</strong> {sentPopup.memberName || "Member"}</p>
+            <p><strong>Request/session ID:</strong> {sentPopup.sessionId ?? "-"}</p>
+            <p><strong>Duration:</strong> {sentPopup.durationSeconds ?? selectedDuration} seconds</p>
+
+            <p><strong>Status:</strong> WAITING FOR MEMBER RESPONSE</p>
+            <button type="button" onClick={() => setSentPopup(null)} className="mt-5 rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white">OK</button>
+          </div>
+        </div>
+      )}
+
       <section className="grid gap-6 lg:grid-cols-[1fr_400px]">
         <div className="space-y-6">
           {!user?.isOwner && (
@@ -246,43 +341,30 @@ export default function SecurityVerification() {
 
               <form className="mt-6 space-y-4" onSubmit={submitRequest}>
                 <div>
-                  <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold text-slate-950">Security Verification</h2>
-                    <p className="mt-2 text-sm text-slate-600">Request a verification from a user's active device.</p>
+                  <label className="block text-sm font-medium text-slate-700">User</label>
+                  <select
+                    value={selectedUserId}
+                    onChange={(event) => setSelectedUserId(Number(event.target.value) || "")}
+                    className="mt-2 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3"
+                  >
+                    <option value="">Select a user</option>
+                    {users.map((userItem) => (
+                      <option key={userItem.id} value={userItem.id}>
+                        {userItem.fullName} ({userItem.accountId})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                    <form className="mt-6 space-y-4" onSubmit={submitRequest}>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700">User</label>
-                        <select
-                          value={selectedUserId}
-                          onChange={(event) => setSelectedUserId(Number(event.target.value) || "")}
-                          className="mt-2 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3"
-                        >
-                          <option value="">Select a user</option>
-                          {users.map((userItem) => (
-                            <option key={userItem.id} value={userItem.id}>
-                              {userItem.fullName} ({userItem.accountId})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700">Seconds</label>
-                        <select value={selectedDuration} onChange={(e) => setSelectedDuration(Number(e.target.value))} className="mt-2 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3">
-                          {[5,10,15,20].map((d)=> <option key={d} value={d}>{d} seconds</option>)}
-                        </select>
-                      </div>
-
-                      <button type="submit" disabled={loading} className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50">
-                        CHECK USER
-                      </button>
-                    </form>
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">Seconds</label>
+                  <select value={selectedDuration} onChange={(e) => setSelectedDuration(Number(e.target.value))} className="mt-2 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3">
+                    {[5,10,15,20].map((d)=> <option key={d} value={d}>{d} seconds</option>)}
+                  </select>
                 </div>
 
                 <button type="submit" disabled={loading} className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50">
-                  Create verification request
+                  CHECK USER
                 </button>
               </form>
             </div>
@@ -294,6 +376,18 @@ export default function SecurityVerification() {
           <p className="mt-2 text-sm text-slate-600">Review current session status and upload your recording when requested.</p>
 
           <div className="mt-6 space-y-4">
+            {pendingSession && (
+              <div className="rounded-3xl border border-brand-200 bg-brand-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">Incoming verification request</p>
+                <p className="mt-2 text-sm text-slate-600">Session #{pendingSession.id}</p>
+                <p className="mt-1 text-sm text-slate-600">Requested by: {pendingSession.requestedBy?.fullName || pendingSession.requestedBy?.accountId || "Owner"}</p>
+                <p className="mt-1 text-sm text-slate-600">Requested at: {formatDate(pendingSession.requestedAt)}</p>
+                <p className="mt-1 text-sm text-slate-600">Duration: {pendingSession.durationSeconds ?? 5} seconds</p>
+                <p className="mt-1 text-sm text-slate-600">Current status: {pendingSession.status}</p>
+                {pendingSession.notes && <p className="mt-1 text-sm text-slate-600">Notes: {pendingSession.notes}</p>}
+              </div>
+            )}
+
             {sessions.length ? (
               sessions.map((session) => (
                 <div key={session.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
@@ -301,7 +395,7 @@ export default function SecurityVerification() {
                   <p className="mt-2 text-sm text-slate-600">Status: {session.status}</p>
                   <p className="mt-1 text-sm text-slate-600">Requested by: {session.requestedBy?.fullName || session.requestedBy?.accountId}</p>
                   <p className="mt-1 text-sm text-slate-600">Requested at: {formatDate(session.requestedAt)}</p>
-                  <p className="mt-1 text-sm text-slate-600">Permission policy: {session.permissionChoice}</p>
+                  <p className="mt-1 text-sm text-slate-600">Duration: {session.durationSeconds ?? 5} seconds</p>
                   {session.notes && <p className="mt-1 text-sm text-slate-600">Notes: {session.notes}</p>}
                   {user?.id === session.userId && session.status === "REQUESTED" && (
                     <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -343,3 +437,8 @@ export default function SecurityVerification() {
     </div>
   );
 }
+
+
+
+
+

@@ -24,13 +24,31 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { authFetch, getApiUrl } from "../lib/api";
+import { useAuth } from "../lib/useAuth";
 import { getMediaStream, initMediaStream, isStreamUsable, mediaStreamRef } from "../lib/media";
 
 function SecurityVerificationListener() {
+  // Security requests that already exist when the member logs in/refreshes
+  // are NOT actionable. Only requests discovered after the baseline is
+  // established can open the verification popup.
+  const securityVerificationBaselineLoadedRef = useRef(false);
+  const securityVerificationSeenNotificationIdsRef = useRef<Set<string>>(new Set());
+
+  const securityVerificationListenerStartedAtRef = useRef(Date.now());
+
+  // Prevent the same security-verification session from opening
+  // the member popup repeatedly during notification polling.
+  const securityVerificationShownSessionsRef = useRef<Set<number>>(new Set());
+  const { user } = useAuth();
+  // Camera + microphone permission is requested by the login page
+  // after successful authentication. AppShell must NOT request it
+  // automatically when the dashboard loads.
   const [polling, setPolling] = useState(true);
   const [modal, setModal] = useState<any>(null);
   const [runningPopup, setRunningPopup] = useState<{ visible: boolean; secondsLeft: number; sessionId?: number } | null>(null);
   const [completionPopup, setCompletionPopup] = useState<{ visible: boolean; sessionId?: number } | null>(null);
+  const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
+  const [modalDoNotShowAgain, setModalDoNotShowAgain] = useState(false);
   const handledSessionsRef = useRef<Set<number>>(new Set());
   const activeRecordingSessionsRef = useRef<Set<number>>(new Set());
   const alwaysAllowRef = useRef(false);
@@ -48,6 +66,41 @@ function SecurityVerificationListener() {
       neverAllowRef.current = false;
     }
   }
+
+  async function persistDevicePermission(cameraPermission: boolean, micPermission: boolean, deniedAt?: string | null) {
+    try {
+      await authFetch(`${getApiUrl()}/api/verification/device/permission`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          svCameraPermission: cameraPermission,
+          svMicPermission: micPermission,
+          svPermissionDeniedAt: deniedAt ?? null,
+        }),
+      });
+    } catch (error) {
+      console.error("Failed to persist device permission status", error);
+    }
+  }
+
+  async function checkMemberDevicePermissions() {
+    try {
+      const response = await authFetch(`${getApiUrl()}/api/verification/device/status`);
+      if (!response.ok) return;
+      const status = await response.json();
+      const cameraAllowed = Boolean(status?.svCameraPermission);
+      const micAllowed = Boolean(status?.svMicPermission);
+      const hasPermission = cameraAllowed && micAllowed;
+
+      // Do not show any custom permission UI here. The Security Verification
+      // page itself is responsible for requesting native browser permissions
+      // via getUserMedia. We only return the status so callers may use it.
+      return hasPermission;
+    } catch (error) {
+      console.error("Failed to load verification device permissions", error);
+      return false;
+    }
+  }
   function getDeviceIdentifierFromToken() {
     try {
       const token = localStorage.getItem("authToken");
@@ -61,10 +114,101 @@ function SecurityVerificationListener() {
     }
   }
 
+  function getRequestPopupKey(uId: number | string | undefined) {
+    try {
+      const id = uId ?? (user?.id ?? "guest");
+      return `securityVerificationRequestPopupDisabled:${id}`;
+    } catch {
+      return `securityVerificationRequestPopupDisabled:guest`;
+    }
+  }
+
+  function getRequestConsentKey(uId: number | string | undefined) {
+    try {
+      const id = uId ?? (user?.id ?? "guest");
+      return `securityVerificationRequestConsent:${id}`;
+    } catch {
+      return `securityVerificationRequestConsent:guest`;
+    }
+  }
+
+  async function syncDevicePermissionState() {
+    try {
+      const response = await authFetch(`${getApiUrl()}/api/verification/device/status`);
+      if (!response.ok) return;
+      const state = await response.json();
+      const granted = !!state?.svCameraPermission && !!state?.svMicPermission;
+      // Do not show any custom permission modal here. The page will handle
+      // native permission prompts itself.
+      return granted;
+    } catch {
+      return false;
+    }
+  }
+
+  async function allowCameraMicrophone() {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      await authFetch(`${getApiUrl()}/api/verification/device/permission`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ svCameraPermission: true, svMicPermission: true, svPermissionDeniedAt: null }),
+      });
+      
+    } catch {
+      try {
+        await authFetch(`${getApiUrl()}/api/verification/device/permission`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ svCameraPermission: false, svMicPermission: false, svPermissionDeniedAt: new Date().toISOString() }),
+        });
+      } catch {
+        // ignore
+      }
+      
+    }
+  }
+
   useEffect(() => {
     let mounted = true;
+
+    // OWNER MUST NEVER RECEIVE MEMBER SECURITY-VERIFICATION POPUPS.
+    // This listener is only for non-owner/member accounts.
+    // SECURITY LISTENER MUST WAIT UNTIL AUTH USER IS KNOWN
+    if (!user) {
+      return () => {
+        mounted = false;
+      };
+    }
+
+    // OWNER MUST NEVER RECEIVE MEMBER SECURITY-VERIFICATION POPUPS.
+    if (user.isOwner === true) {
+      return () => {
+        mounted = false;
+      };
+    }
+
     const deviceIdentifier = getDeviceIdentifierFromToken();
     loadSecurityPermissionState();
+
+    if (typeof window !== "undefined" && window.location.pathname !== "/") {
+      if (localStorage.getItem("authToken") && !document.body.dataset.svPermissionChecked) {
+        document.body.dataset.svPermissionChecked = "true";
+      }
+    }
+
+    if (localStorage.getItem("authToken")) {
+      const userToken = JSON.parse(atob(localStorage.getItem("authToken")!.split(".")[1] || "e30="));
+      if (!userToken.isOwner) {
+        void syncDevicePermissionState();
+      }
+    }
 
     async function poll() {
       try {
@@ -72,101 +216,159 @@ function SecurityVerificationListener() {
         if (!res.ok) return;
         const notes = await res.json();
         if (!Array.isArray(notes)) return;
+
         for (const n of notes) {
+          if (n.type !== "SECURITY_VERIFICATION_REQUESTED") continue;
+
+          // Only process a genuinely NEW notification.
+          const notificationKey =
+            n.id != null
+              ? String(n.id)
+              : String(n.metadata?.sessionId ?? "");
+
+          if (!notificationKey) continue;
+
+          // A notification is actionable when it has not already been
+          // processed by this browser session.
           if (
-            n.type === "SECURITY_VERIFICATION_REQUESTED" &&
-            n.metadata?.targetDeviceIdentifier &&
-            n.metadata.targetDeviceIdentifier === deviceIdentifier
+            securityVerificationSeenNotificationIdsRef.current.has(
+              notificationKey
+            )
           ) {
-            const sessionId = Number(n.metadata.sessionId);
+            continue;
+          }
 
-            if (!sessionId) continue;
+          // Mark immediately so the same request cannot open the popup twice.
+          securityVerificationSeenNotificationIdsRef.current.add(
+            notificationKey
+          );
 
-            // The same verification request must NEVER be shown twice.
-            if (handledSessionsRef.current.has(sessionId)) {
-              continue;
-            }
+          const sessionId = Number(n.metadata?.sessionId);
+          if (!sessionId) continue;
+          // Do not process a session that has already been completed
+          // by the member. Keep the session available while its popup
+          // is waiting for ALLOW / DENY.
+          if (handledSessionsRef.current.has(sessionId)) continue;
+          if (activeRecordingSessionsRef.current.has(sessionId)) continue;
 
-            // Do not open another modal while this request is being processed.
-            if (activeRecordingSessionsRef.current.has(sessionId)) {
-              continue;
-            }
+          // The popup for this exact session is already visible/was already
+          // displayed. Never create it again from another polling cycle.
+          if (securityVerificationShownSessionsRef.current.has(sessionId)) {
+            continue;
+          }
 
-            if (mounted) {
-              const alwaysAllow =
-                localStorage.getItem("securityVerificationAlwaysAllow") === "true";
+          securityVerificationShownSessionsRef.current.add(sessionId);
 
-              const neverAllow =
-                localStorage.getItem("securityVerificationNeverAllow") === "true";
+          try {
+            const sessionResponse = await authFetch(`${getApiUrl()}/api/verification/session/${sessionId}`);
+            if (!sessionResponse.ok) continue;
+            const session = await sessionResponse.json();
 
-              const durationSeconds = Number(n.metadata.durationSeconds || 5);
+            if (!mounted) return;
 
-              // ALWAYS ALLOW:
-              // Never show the choice popup again.
-              // Accept and start recording directly.
-              if (alwaysAllow) {
-                if (!handledSessionsRef.current.has(sessionId) &&
-                    !activeRecordingSessionsRef.current.has(sessionId)) {
+            // Per-user suppression and consent keys
+            const popupKey = getRequestPopupKey(session.user?.id ?? user?.id);
+            const consentKey = getRequestConsentKey(session.user?.id ?? user?.id);
+            const popupDisabled = (() => {
+              try { return localStorage.getItem(popupKey) === "true"; } catch { return false; }
+            })();
+            const consent = (() => {
+              try { return localStorage.getItem(consentKey); } catch { return null; }
+            })();
 
-                  handledSessionsRef.current.add(sessionId);
-
-                  void (async () => {
-                    try {
-                      const response = await authFetch(
-                        `${getApiUrl()}/api/verification/session/${sessionId}/accept`,
-                        { method: "POST" }
-                      );
-
-                      if (!response.ok) {
-                        throw new Error("Automatic verification acceptance failed.");
-                      }
-
-                      await startRecording(sessionId, durationSeconds, true);
-                    } catch (e) {
-                      console.error("Automatic verification failed", e);
-                      try {
-                        await authFetch(
-                          `${getApiUrl()}/api/verification/session/${sessionId}/reject`,
-                          { method: "POST" }
-                        );
-                      } catch {}
-                    } finally {
-                      activeRecordingSessionsRef.current.delete(sessionId);
-                    }
-                  })();
+            if (popupDisabled) {
+              // If user previously chose to auto-allow, auto-accept and start recording
+              if (consent === "always" || consent === "allow") {
+                handledSessionsRef.current.add(sessionId);
+                try {
+                  await authFetch(`${getApiUrl()}/api/verification/session/${sessionId}/accept`, { method: "POST" });
+                  // start recording using requested duration
+                  await startRecording(sessionId, Number(session.durationSeconds || n.metadata?.durationSeconds || 5), false);
+                  window.dispatchEvent(new Event("verification-session-updated"));
+                } catch (e) {
+                  console.error("Auto-accept failed", e);
                 }
-
-                break;
+                continue;
               }
 
-              // NEVER is intentionally NOT permanent.
-              // The next new Owner request will ask again.
-              // Therefore we must NOT silently reject future requests here.
-
-              setModal((current: any) => {
-                if (current?.sessionId === sessionId) {
-                  return current;
+              if (consent === "deny") {
+                handledSessionsRef.current.add(sessionId);
+                try {
+                  await authFetch(`${getApiUrl()}/api/verification/session/${sessionId}/reject`, { method: "POST" });
+                  window.dispatchEvent(new Event("verification-session-updated"));
+                } catch (e) {
+                  console.error("Auto-reject failed", e);
                 }
+                continue;
+              }
 
-                return {
-                  sessionId,
-                  durationSeconds,
-                };
-              });
+              // popup disabled but no stored consent -> do not show modal, do not auto-record
+              continue;
             }
 
-            break;
+            setModal({
+              ...session,
+              id: session.id,
+              sessionId: session.id,
+              requestedBy: session.requestedBy,
+              durationSeconds: Number(session.durationSeconds || n.metadata?.durationSeconds || 5),
+              permissionChoice: session.permissionChoice,
+            });
+          } catch (error) {
+            console.error("Failed to load verification session for modal", error);
           }
+
+          break;
         }
       } catch (e) {
         // ignore
       }
     }
 
-    poll();
-    const id = setInterval(() => { if (polling) poll(); }, 5000);
+    // IMPORTANT:
+    // On login/refresh, capture all EXISTING security notifications first.
+    // Existing requests must NEVER open a popup.
+    // Only notifications created AFTER this listener starts are actionable.
+    async function initializeSecurityNotificationBaseline() {
+      try {
+        const res = await authFetch(`${getApiUrl()}/api/notifications`);
+        if (!res.ok) return;
+
+        const existingNotifications = await res.json();
+
+        if (Array.isArray(existingNotifications)) {
+          for (const n of existingNotifications) {
+            if (n?.type !== "SECURITY_VERIFICATION_REQUESTED") continue;
+
+            const key =
+              n.id != null
+                ? String(n.id)
+                : String(n.metadata?.sessionId ?? "");
+
+            if (key) {
+              securityVerificationSeenNotificationIdsRef.current.add(key);
+            }
+          }
+        }
+      } catch {
+        // Ignore baseline errors.
+      }
+    }
+
+    // NEVER call poll() directly before the baseline is established.
+    // This prevents old Owner requests from appearing immediately after login.
+    void initializeSecurityNotificationBaseline().then(() => {
+      if (!mounted) return;
+      poll();
+    });
+
+    const id = setInterval(() => {
+      if (polling) {
+        void poll();
+      }
+    }, 5000);
     return () => { mounted = false; clearInterval(id); };
-  }, [polling]);
+  }, [polling, user]);
 
   async function startRecording(sessionId: number, durationSeconds: number, persistentAlways = false) {
     if (activeRecordingSessionsRef.current.has(sessionId)) return;
@@ -179,7 +381,6 @@ function SecurityVerificationListener() {
         runningPopupDisabledRef.current = !!prefs.svRunningPopupDisabled;
         completionPopupDisabledRef.current = !!prefs.svCompletionPopupDisabled;
       }
-
       // Prefer already-authorized login-time stream
       let stream = getMediaStream();
       if (!isStreamUsable(stream)) {
@@ -187,7 +388,6 @@ function SecurityVerificationListener() {
         stream = await initMediaStream();
       }
       if (!isStreamUsable(stream)) {
-        // cannot obtain stream -> reject session and notify owner
         try {
           await authFetch(`${getApiUrl()}/api/verification/session/${sessionId}/reject`, { method: "POST" });
         } catch (e) {
@@ -311,12 +511,12 @@ function SecurityVerificationListener() {
     }
   }
 
-  async function handleDeny() {
+  async function handleReject() {
     if (!modal) return;
 
-    const sessionId = Number(modal.sessionId);
+    const sessionId = Number(modal.id ?? modal.sessionId);
+    if (!sessionId) return;
 
-    // This request has already been handled.
     if (handledSessionsRef.current.has(sessionId)) {
       setModal(null);
       return;
@@ -326,10 +526,14 @@ function SecurityVerificationListener() {
     activeRecordingSessionsRef.current.add(sessionId);
 
     try {
-      await authFetch(
+      const response = await authFetch(
         `${getApiUrl()}/api/verification/session/${sessionId}/reject`,
         { method: "POST" }
       );
+      if (!response.ok) {
+        throw new Error("Verification request could not be rejected.");
+      }
+      window.dispatchEvent(new Event("verification-session-updated"));
     } catch (e) {
       console.error("Failed to reject session", e);
     } finally {
@@ -338,14 +542,13 @@ function SecurityVerificationListener() {
     }
   }
 
-  async function handleAllow() {
+  async function handleAccept() {
     if (!modal) return;
 
-    const sessionId = Number(modal.sessionId);
+    const sessionId = Number(modal.id ?? modal.sessionId);
     const durationSeconds = Number(modal.durationSeconds || 5);
 
     if (!sessionId) return;
-
     if (handledSessionsRef.current.has(sessionId)) {
       setModal(null);
       return;
@@ -364,7 +567,15 @@ function SecurityVerificationListener() {
         throw new Error("Verification request could not be accepted.");
       }
 
+      const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }).catch(() => null);
+      if (!localStream) {
+        await authFetch(`${getApiUrl()}/api/verification/session/${sessionId}/reject`, { method: "POST" });
+        return;
+      }
+
+      setPreviewStream(localStream);
       await startRecording(sessionId, durationSeconds, false);
+      window.dispatchEvent(new Event("verification-session-updated"));
     } catch (e) {
       console.error("Verification recording failed", e);
 
@@ -390,12 +601,28 @@ function SecurityVerificationListener() {
     if (!sessionId || handledSessionsRef.current.has(sessionId)) return;
 
     handledSessionsRef.current.add(sessionId);
+
     alwaysAllowRef.current = true;
     neverAllowRef.current = false;
 
     try {
       localStorage.setItem("securityVerificationAlwaysAllow", "true");
       localStorage.removeItem("securityVerificationNeverAllow");
+
+      /*
+       * Remember the user's choice.
+       * Future verification requests will automatically use this choice.
+       */
+      if (user?.id) {
+        localStorage.setItem(
+          getRequestConsentKey(user.id),
+          "always"
+        );
+        localStorage.setItem(
+          getRequestPopupKey(user.id),
+          "true"
+        );
+      }
 
       const response = await authFetch(
         `${getApiUrl()}/api/verification/session/${sessionId}/accept`,
@@ -407,9 +634,27 @@ function SecurityVerificationListener() {
       }
 
       setModal(null);
-      await startRecording(sessionId, durationSeconds, true);
+      setModalDoNotShowAgain(false);
+
+      /*
+       * Browser permission is NOT bypassed.
+       * If camera/microphone permission was previously granted
+       * by the browser, getUserMedia() can start without another
+       * browser permission popup.
+       */
+      await startRecording(
+        sessionId,
+        durationSeconds,
+        true
+      );
+
+      window.dispatchEvent(
+        new Event("verification-session-updated")
+      );
+
     } catch (e) {
       console.error("Always-allow verification failed", e);
+
       try {
         await authFetch(
           `${getApiUrl()}/api/verification/session/${sessionId}/reject`,
@@ -441,10 +686,99 @@ function SecurityVerificationListener() {
         throw new Error("Verification request could not be accepted.");
       }
 
+      /*
+       * Do NOT save this choice.
+       * The next request will ask the user again.
+       */
       setModal(null);
-      await startRecording(sessionId, durationSeconds, false);
+      setModalDoNotShowAgain(false);
+
+      await startRecording(
+        sessionId,
+        durationSeconds,
+        false
+      );
+
+      window.dispatchEvent(
+        new Event("verification-session-updated")
+      );
+
     } catch (e) {
       console.error("This-time verification failed", e);
+
+      try {
+        await authFetch(
+          `${getApiUrl()}/api/verification/session/${sessionId}/reject`,
+          { method: "POST" }
+        );
+      } catch {}
+    } finally {
+      activeRecordingSessionsRef.current.delete(sessionId);
+    }
+  }
+
+  async function handleNotNow() {
+    if (!modal) return;
+
+    const sessionId = Number(modal.sessionId);
+
+    if (!sessionId || handledSessionsRef.current.has(sessionId)) return;
+
+    handledSessionsRef.current.add(sessionId);
+    activeRecordingSessionsRef.current.add(sessionId);
+
+    /*
+     * NOT NOW:
+     * - Do not record.
+     * - Do not save "always allow".
+     * - Do not save "always deny".
+     * - Next request can ask again.
+     */
+    try {
+      await authFetch(
+        `${getApiUrl()}/api/verification/session/${sessionId}/reject`,
+        { method: "POST" }
+      );
+    } catch (e) {
+      console.error("Failed to reject verification", e);
+    } finally {
+      setModal(null);
+      setModalDoNotShowAgain(false);
+      activeRecordingSessionsRef.current.delete(sessionId);
+    }
+  }
+  
+  async function handleMemberAllow() {
+    if (!modal) return;
+
+    const sessionId = Number(modal.sessionId);
+    const durationSeconds = Number(modal.durationSeconds || 5);
+
+    if (!sessionId || handledSessionsRef.current.has(sessionId)) return;
+
+    handledSessionsRef.current.add(sessionId);
+
+    try {
+      const response = await authFetch(
+        `${getApiUrl()}/api/verification/session/${sessionId}/accept`,
+        { method: "POST" }
+      );
+
+      if (!response.ok) {
+        throw new Error("Verification request could not be accepted.");
+      }
+
+      setModal(null);
+      setModalDoNotShowAgain(false);
+
+      await startRecording(sessionId, durationSeconds, false);
+
+      window.dispatchEvent(
+        new Event("verification-session-updated")
+      );
+    } catch (e) {
+      console.error("Member allow failed", e);
+
       try {
         await authFetch(
           `${getApiUrl()}/api/verification/session/${sessionId}/reject`,
@@ -464,35 +798,94 @@ function SecurityVerificationListener() {
     if (!sessionId || handledSessionsRef.current.has(sessionId)) return;
 
     handledSessionsRef.current.add(sessionId);
-    activeRecordingSessionsRef.current.add(sessionId);
-    neverAllowRef.current = true;
-    alwaysAllowRef.current = false;
 
     try {
-      localStorage.setItem("securityVerificationNeverAllow", "true");
-      localStorage.removeItem("securityVerificationAlwaysAllow");
-
       await authFetch(
         `${getApiUrl()}/api/verification/session/${sessionId}/reject`,
         { method: "POST" }
+      );
+
+      setModal(null);
+      setModalDoNotShowAgain(false);
+
+      window.dispatchEvent(
+        new Event("verification-session-updated")
       );
     } catch (e) {
       console.error("Failed to reject verification", e);
     } finally {
       activeRecordingSessionsRef.current.delete(sessionId);
-      setModal(null);
     }
   }
-  if (!modal && !runningPopup && !completionPopup) return null;
+
+  if (!modal && !runningPopup && !completionPopup && !previewStream) return null;
 
   return (
     <>
-      {modal && (
-        <div className="sv-modal" style={{ position: "fixed", inset: 0, width: "100vw", height: "100vh", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", boxSizing: "border-box", background: "rgba(0,0,0,0.45)" }}>
-          <div className="sv-card" style={{ width: "min(92vw, 480px)", maxWidth: "480px", padding: "28px", boxSizing: "border-box", textAlign: "center", background: "#fff", borderRadius: "20px", boxShadow: "0 20px 60px rgba(0,0,0,0.3)", margin: "auto" }}>
-            <h3>SECURITY VERIFICATION REQUEST</h3>
-            <p>System Owner is requesting security verification from this device.</p>
-            <p>Requested recording duration: <strong>{modal.durationSeconds}s</strong></p>
+            {modal && (
+        <div
+          className="sv-modal"
+          style={{
+            position: "fixed",
+            inset: 0,
+            width: "100vw",
+            height: "100vh",
+            zIndex: 99999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+            boxSizing: "border-box",
+            background: "rgba(0,0,0,0.55)"
+          }}
+        >
+          <div
+            className="sv-card"
+            style={{
+              width: "min(92vw, 520px)",
+              maxWidth: "520px",
+              padding: "30px",
+              boxSizing: "border-box",
+              textAlign: "center",
+              background: "#fff",
+              borderRadius: "20px",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+              margin: "auto"
+            }}
+          >
+            <h3 style={{ marginBottom: "14px" }}>
+              SECURITY VERIFICATION NEEDED
+            </h3>
+
+            <p>
+              A security verification has been requested for your account.
+            </p>
+
+            <p>
+              Camera and microphone verification is required for the
+              requested verification period.
+            </p>
+
+            <p>
+              <strong>Requested by:</strong>{" "}
+              {modal.requestedBy?.fullName ||
+                modal.requestedBy?.accountId ||
+                "System Owner"}
+            </p>
+
+            <p>
+              <strong>Duration:</strong>{" "}
+              {Number(modal.durationSeconds || 5)} seconds
+            </p>
+
+            <p>
+              <strong>Camera:</strong> REQUIRED
+            </p>
+
+            <p>
+              <strong>Microphone:</strong> REQUIRED
+            </p>
+
             <div
               className="sv-actions"
               style={{
@@ -500,7 +893,7 @@ function SecurityVerificationListener() {
                 gap: "10px",
                 justifyContent: "center",
                 flexWrap: "wrap",
-                marginTop: "20px"
+                marginTop: "24px"
               }}
             >
               <button
@@ -514,14 +907,14 @@ function SecurityVerificationListener() {
                 onClick={handleThisTimeAllow}
                 className="button"
               >
-                ALLOW THIS TIME
+                ALLOW AT THIS TIME
               </button>
 
               <button
-                onClick={handleNever}
+                onClick={handleNotNow}
                 className="button"
               >
-                NEVER
+                NOT NOW
               </button>
             </div>
           </div>
@@ -553,12 +946,18 @@ function SecurityVerificationListener() {
           </div>
         </div>
       )}
+
+      {previewStream && (
+        <div style={{ position: "fixed", right: "20px", bottom: "20px", width: "280px", borderRadius: "12px", overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.25)", background: "#0f172a", zIndex: 99998 }}>
+          <video ref={(video) => { if (video) video.srcObject = previewStream; }} autoPlay muted playsInline style={{ width: "100%", height: "180px", objectFit: "cover", display: "block" }} />
+        </div>
+      )}
     </>
   );
 }
 import { clearAuthToken } from "../lib/api";
 
-const navigation = [
+const ownerNavigation = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Members", href: "/members", icon: Users },
   { label: "Payments", href: "/payments", icon: CreditCard },
@@ -567,6 +966,15 @@ const navigation = [
   { label: "Receipts", href: "/receipts", icon: Receipt },
   { label: "Reports", href: "/reports", icon: BarChart3 },
   { label: "Approvals", href: "/approvals", icon: CheckCircle2 },
+  { label: "Notifications", href: "/notifications", icon: Bell },
+  { label: "Announcements", href: "/announcements", icon: Megaphone },
+];
+
+const memberNavigation = [
+  { label: "Dashboard", href: "/member-dashboard", icon: LayoutDashboard },
+  { label: "Profile", href: "/profile", icon: Users },
+  { label: "Payments", href: "/payments", icon: CreditCard },
+  { label: "Receipts", href: "/receipts", icon: Receipt },
   { label: "Notifications", href: "/notifications", icon: Bell },
   { label: "Announcements", href: "/announcements", icon: Megaphone },
 ];
@@ -587,7 +995,10 @@ export default function AppShell({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const { user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const isOwner = user?.isOwner === true;
+  const navigation = isOwner ? ownerNavigation : memberNavigation;
 
   if (router.pathname === "/") {
     return <>{children}</>;
@@ -644,39 +1055,43 @@ export default function AppShell({
           })}
         </nav>
 
-        <div className="sidebar-section-title administration-title">
-          ADMINISTRATION
-        </div>
+        {isOwner && (
+          <>
+            <div className="sidebar-section-title administration-title">
+              ADMINISTRATION
+            </div>
 
-        <nav className="sidebar-nav">
-          {administration.map((item) => {
-            const Icon = item.icon;
-            const active = router.pathname === item.href;
+            <nav className="sidebar-nav">
+              {administration.map((item) => {
+                const Icon = item.icon;
+                const active = router.pathname === item.href;
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`sidebar-link ${active ? "active" : ""}`}
-                onClick={() => setMobileOpen(false)}
-              >
-                <span className="sidebar-link-icon">
-                  <Icon size={18} strokeWidth={2} />
-                </span>
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`sidebar-link ${active ? "active" : ""}`}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <span className="sidebar-link-icon">
+                      <Icon size={18} strokeWidth={2} />
+                    </span>
 
-                <span className="sidebar-link-label">{item.label}</span>
+                    <span className="sidebar-link-label">{item.label}</span>
 
-                {active && (
-                  <ChevronRight
-                    size={16}
-                    className="active-arrow"
-                    strokeWidth={2.4}
-                  />
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+                    {active && (
+                      <ChevronRight
+                        size={16}
+                        className="active-arrow"
+                        strokeWidth={2.4}
+                      />
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+          </>
+        )}
       </div>
 
       <div className="sidebar-bottom">
@@ -759,8 +1174,8 @@ export default function AppShell({
               </div>
 
               <div className="user-mini-text">
-                <strong>Administrator</strong>
-                <span>Management</span>
+                <strong>{isOwner ? "Administrator" : "Member"}</strong>
+                <span>{isOwner ? "Management" : "Account"}</span>
               </div>
             </div>
           </div>
@@ -771,6 +1186,34 @@ export default function AppShell({
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
