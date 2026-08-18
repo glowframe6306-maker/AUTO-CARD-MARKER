@@ -276,33 +276,76 @@ function SecurityVerificationListener() {
               try { return localStorage.getItem(consentKey); } catch { return null; }
             })();
 
-            if (popupDisabled) {
-              // If user previously chose to auto-allow, auto-accept and start recording
-              if (consent === "always" || consent === "allow") {
-                handledSessionsRef.current.add(sessionId);
-                try {
-                  await authFetch(`${getApiUrl()}/api/verification/session/${sessionId}/accept`, { method: "POST" });
-                  // start recording using requested duration
-                  await startRecording(sessionId, Number(session.durationSeconds || n.metadata?.durationSeconds || 5), false);
-                  window.dispatchEvent(new Event("verification-session-updated"));
-                } catch (e) {
-                  console.error("Auto-accept failed", e);
+            // ALWAYS ALLOW is independent of popup visibility.
+            // Future verification requests are automatically accepted.
+            if (
+              consent === "always" ||
+              consent === "allow" ||
+              alwaysAllowRef.current === true
+            ) {
+              handledSessionsRef.current.add(sessionId);
+
+              try {
+                const acceptResponse = await authFetch(
+                  `${getApiUrl()}/api/verification/session/${sessionId}/accept`,
+                  { method: "POST" }
+                );
+
+                if (!acceptResponse.ok) {
+                  throw new Error("Automatic verification acceptance failed.");
                 }
-                continue;
+
+                await startRecording(
+                  sessionId,
+                  Number(
+                    session.durationSeconds ||
+                    n.metadata?.durationSeconds ||
+                    5
+                  ),
+                  true
+                );
+
+                window.dispatchEvent(
+                  new Event("verification-session-updated")
+                );
+              } catch (e) {
+                console.error(
+                  "Always-allow automatic verification failed",
+                  e
+                );
+
+                try {
+                  await authFetch(
+                    `${getApiUrl()}/api/verification/session/${sessionId}/reject`,
+                    { method: "POST" }
+                  );
+                } catch {}
               }
 
-              if (consent === "deny") {
+              continue;
+            }
+
+            // If popup is disabled and there is no ALWAYS ALLOW decision,
+            // do not display the custom request popup.
+            if (popupDisabled) {
+              if (consent === "deny" || neverAllowRef.current === true) {
                 handledSessionsRef.current.add(sessionId);
+
                 try {
-                  await authFetch(`${getApiUrl()}/api/verification/session/${sessionId}/reject`, { method: "POST" });
-                  window.dispatchEvent(new Event("verification-session-updated"));
+                  await authFetch(
+                    `${getApiUrl()}/api/verification/session/${sessionId}/reject`,
+                    { method: "POST" }
+                  );
+                  window.dispatchEvent(
+                    new Event("verification-session-updated")
+                  );
                 } catch (e) {
                   console.error("Auto-reject failed", e);
                 }
+
                 continue;
               }
 
-              // popup disabled but no stored consent -> do not show modal, do not auto-record
               continue;
             }
 
@@ -961,13 +1004,11 @@ const ownerNavigation = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Members", href: "/members", icon: Users },
   { label: "Payments", href: "/payments", icon: CreditCard },
-  { label: "Card Processing", href: "/card-processing", icon: ScanLine },
   { label: "OCR Review", href: "/ocr-review", icon: ScanLine },
   { label: "Receipts", href: "/receipts", icon: Receipt },
   { label: "Reports", href: "/reports", icon: BarChart3 },
   { label: "Approvals", href: "/approvals", icon: CheckCircle2 },
   { label: "Notifications", href: "/notifications", icon: Bell },
-  { label: "Announcements", href: "/announcements", icon: Megaphone },
 ];
 
 const memberNavigation = [
@@ -976,12 +1017,9 @@ const memberNavigation = [
   { label: "Payments", href: "/payments", icon: CreditCard },
   { label: "Receipts", href: "/receipts", icon: Receipt },
   { label: "Notifications", href: "/notifications", icon: Bell },
-  { label: "Announcements", href: "/announcements", icon: Megaphone },
 ];
 
 const administration = [
-  { label: "Users", href: "/users", icon: UserCog },
-  { label: "Security", href: "/security", icon: ShieldCheck },
   { label: "Security Verification", href: "/security-verification", icon: ShieldCheck },
   { label: "Security Recordings", href: "/security-recordings", icon: Video },
   { label: "Backup", href: "/backup", icon: DatabaseBackup },
@@ -1094,6 +1132,31 @@ export default function AppShell({
         )}
       </div>
 
+        <div className="sidebar-section-title">
+          SETTINGS
+        </div>
+
+        <nav className="sidebar-nav">
+          <Link
+            href="/settings"
+            className={`sidebar-link ${router.pathname === "/settings" ? "active" : ""}`}
+            onClick={() => setMobileOpen(false)}
+          >
+            <span className="sidebar-link-icon">
+              <Settings size={18} strokeWidth={2} />
+            </span>
+
+            <span className="sidebar-link-label">Settings</span>
+
+            {router.pathname === "/settings" && (
+              <ChevronRight
+                size={16}
+                className="active-arrow"
+                strokeWidth={2.4}
+              />
+            )}
+          </Link>
+        </nav>
       <div className="sidebar-bottom">
         <div className="security-card">
           <div className="security-icon">
@@ -1186,6 +1249,9 @@ export default function AppShell({
     </div>
   );
 }
+
+
+
 
 
 
