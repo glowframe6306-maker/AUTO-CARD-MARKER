@@ -1,0 +1,390 @@
+﻿export type AppLanguage = "English" | "Sinhala" | "Tamil"; 
+ 
+const translations: Record<string, Record<AppLanguage, string>> = { 
+  "Dashboard": { 
+    English: "Dashboard", 
+    Sinhala: "මුල් පුවරුව", 
+    Tamil: "முகப்புப்பலகை", 
+  }, 
+  "Member Dashboard": { 
+    English: "Member Dashboard", 
+    Sinhala: "සාමාජික මුල් පුවරුව", 
+    Tamil: "உறுப்பினர் முகப்புப்பலகை", 
+  }, 
+  "Settings": { 
+    English: "Settings", 
+    Sinhala: "සැකසුම්", 
+    Tamil: "அமைப்புகள்", 
+  }, 
+  "Profile": { 
+    English: "Profile", 
+    Sinhala: "පැතිකඩ", 
+    Tamil: "சுயவிவரம்", 
+  }, 
+  "Members": { 
+    English: "Members", 
+    Sinhala: "සාමාජිකයින්", 
+    Tamil: "உறுப்பினர்கள்", 
+  }, 
+  "Payments": { 
+    English: "Payments", 
+    Sinhala: "ගෙවීම්", 
+    Tamil: "கொடுப்பனவுகள்", 
+  }, 
+  "Reports": { 
+    English: "Reports", 
+    Sinhala: "වාර්තා", 
+    Tamil: "அறிக்கைகள்", 
+  }, 
+  "Notifications": { 
+    English: "Notifications", 
+    Sinhala: "දැනුම්දීම්", 
+    Tamil: "அறிவிப்புகள்", 
+  }, 
+  "Approvals": { 
+    English: "Approvals", 
+    Sinhala: "අනුමත කිරීම්", 
+    Tamil: "அனுமதிகள்", 
+  }, 
+  "Security": { 
+    English: "Security", 
+    Sinhala: "ආරක්ෂාව", 
+    Tamil: "பாதுகாப்பு", 
+  }, 
+  "Security Verification": { 
+    English: "Security Verification", 
+    Sinhala: "ආරක්ෂක සත්‍යාපනය", 
+    Tamil: "பாதுகாப்பு சரிபார்ப்பு", 
+  }, 
+  "Audit Logs": { 
+    English: "Audit Logs", 
+    Sinhala: "ක්‍රියාකාරකම් වාර්තා", 
+    Tamil: "தணிக்கை பதிவுகள்", 
+  }, 
+  "Backup": { 
+    English: "Backup", 
+    Sinhala: "උපස්ථය", 
+    Tamil: "காப்புப்பிரதி", 
+  }, 
+  "System Health": { 
+    English: "System Health", 
+    Sinhala: "පද්ධති සෞඛ්‍යය", 
+    Tamil: "கணினி நிலை", 
+  }, 
+  "System Preferences": { 
+    English: "System Preferences", 
+    Sinhala: "පද්ධති මනාප", 
+    Tamil: "கணினி விருப்பங்கள்", 
+  }, 
+  "Appearance": { 
+    English: "Appearance", 
+    Sinhala: "පෙනුම", 
+    Tamil: "தோற்றம்", 
+  }, 
+  "Language": { 
+    English: "Language", 
+    Sinhala: "භාෂාව", 
+    Tamil: "மொழி", 
+  }, 
+  "Account & Profile": { 
+    English: "Account & Profile", 
+    Sinhala: "ගිණුම සහ පැතිකඩ", 
+    Tamil: "கணக்கு மற்றும் சுயவிவரம்", 
+  }, 
+  "Full Name": { 
+    English: "Full Name", 
+    Sinhala: "සම්පූර්ණ නම", 
+    Tamil: "முழு பெயர்", 
+  }, 
+  "Email": { 
+    English: "Email", 
+    Sinhala: "විද්‍යුත් තැපෑල", 
+    Tamil: "மின்னஞ்சல்", 
+  }, 
+  "Account ID / RC ID": { 
+    English: "Account ID / RC ID", 
+    Sinhala: "ගිණුම් ID / RC ID", 
+    Tamil: "கணக்கு ID / RC ID", 
+  }, 
+  "Account Type": { 
+    English: "Account Type", 
+    Sinhala: "ගිණුම් වර්ගය", 
+    Tamil: "கணக்கு வகை", 
+  }, 
+  "OWNER": { 
+    English: "OWNER", 
+    Sinhala: "හිමිකරු", 
+    Tamil: "உரிமையாளர்", 
+  }, 
+  "MEMBER": { 
+    English: "MEMBER", 
+    Sinhala: "සාමාජික", 
+    Tamil: "உறுப்பினர்", 
+  }, 
+  "Save Profile": { 
+    English: "Save Profile", 
+    Sinhala: "පැතිකඩ සුරකින්න", 
+    Tamil: "சுயவிவரத்தை சேமிக்கவும்", 
+  }, 
+  "Change Password": { 
+    English: "Change Password", 
+    Sinhala: "මුරපදය වෙනස් කරන්න", 
+    Tamil: "கடவுச்சொல்லை மாற்றவும்", 
+  }, 
+  "Current password": { 
+    English: "Current password", 
+    Sinhala: "වත්මන් මුරපදය", 
+    Tamil: "தற்போதைய கடவுச்சொல்", 
+  }, 
+  "New password": { 
+    English: "New password", 
+    Sinhala: "නව මුරපදය", 
+    Tamil: "புதிய கடவுச்சொல்", 
+  }, 
+  "Confirm new password": { 
+    English: "Confirm new password", 
+    Sinhala: "නව මුරපදය තහවුරු කරන්න", 
+    Tamil: "புதிய கடவுச்சொல்லை உறுதிப்படுத்தவும்", 
+  }, 
+  "English": { 
+    English: "English", 
+    Sinhala: "ඉංග්‍රීසි", 
+    Tamil: "ஆங்கிலம்", 
+  }, 
+  "Sinhala": { 
+    English: "Sinhala", 
+    Sinhala: "සිංහල", 
+    Tamil: "சிங்களம்", 
+  }, 
+  "Tamil": { 
+    English: "Tamil", 
+    Sinhala: "දෙමළ", 
+    Tamil: "தமிழ்", 
+  }, 
+  "System Default": { 
+    English: "System Default", 
+    Sinhala: "පද්ධති පෙරනිමිය", 
+    Tamil: "கணினி இயல்புநிலை", 
+  }, 
+  "Light": { 
+    English: "Light", 
+    Sinhala: "ආලෝක", 
+    Tamil: "வெளிச்சம்", 
+  }, 
+  "Dark": { 
+    English: "Dark", 
+    Sinhala: "අඳුරු", 
+    Tamil: "இருள்", 
+  }, 
+  "Save Preferences": { 
+    English: "Save Preferences", 
+    Sinhala: "මනාප සුරකින්න", 
+    Tamil: "விருப்பங்களை சேமிக்கவும்", 
+  }, 
+  "Create Backup": { 
+    English: "Create Backup", 
+    Sinhala: "උපස්ථයක් සාදන්න", 
+    Tamil: "காப்புப்பிரதியை உருவாக்கவும்", 
+  }, 
+  "Open Backup Manager": { 
+    English: "Open Backup Manager", 
+    Sinhala: "උපස්ථ කළමනාකරු විවෘත කරන්න", 
+    Tamil: "காப்புப்பிரதி மேலாளரைத் திறக்கவும்", 
+  }, 
+  "Privacy": { 
+    English: "Privacy", 
+    Sinhala: "පෞද්ගලිකත්වය", 
+    Tamil: "தனியுரிமை", 
+  }, 
+  "Support": { 
+    English: "Support", 
+    Sinhala: "සහාය", 
+    Tamil: "ஆதரவு", 
+  }, 
+  "Users": { 
+    English: "Users", 
+    Sinhala: "පරිශීලකයින්", 
+    Tamil: "பயனர்கள்", 
+  }, 
+  "System Version": { 
+    English: "System Version", 
+    Sinhala: "පද්ධති අනුවාදය", 
+    Tamil: "கணினி பதிப்பு", 
+  }, 
+  "API Status": { 
+    English: "API Status", 
+    Sinhala: "API තත්ත්වය", 
+    Tamil: "API நிலை", 
+  }, 
+  "Help Center": { 
+    English: "Help Center", 
+    Sinhala: "උදව් මධ්‍යස්ථානය", 
+    Tamil: "உதவி மையம்", 
+  }, 
+  "Owner Settings": { 
+    English: "Owner Settings", 
+    Sinhala: "හිමිකරු සැකසුම්", 
+    Tamil: "உரிமையாளர் அமைப்புகள்", 
+  }, 
+  "User Management": { 
+    English: "User Management", 
+    Sinhala: "පරිශීලක කළමනාකරණය", 
+    Tamil: "பயனர் மேலாண்மை", 
+  }, 
+  "Save": { 
+    English: "Save", 
+    Sinhala: "සුරකින්න", 
+    Tamil: "சேமிக்கவும்", 
+  }, 
+}; 
+ 
+export function getStoredLanguage(): AppLanguage { 
+  if (typeof window === "undefined") return "English"; 
+ 
+  const value = localStorage.getItem("app-language"); 
+ 
+  if ( 
+    value === "English" || 
+    value === "Sinhala" || 
+    value === "Tamil" 
+  ) { 
+    return value; 
+  } 
+ 
+  return "English"; 
+} 
+ 
+export function translateText( 
+  text: string, 
+  language: AppLanguage 
+): string { 
+  const clean = text.trim(); 
+ 
+  if (!clean) return text; 
+ 
+  const item = translations[clean]; 
+ 
+  if (!item) return text; 
+ 
+  const translated = item[language]; 
+ 
+  if (!translated) return text; 
+ 
+  return text.replace(clean, translated); 
+} 
+ 
+function shouldSkipElement(element: Element): boolean { 
+  const tag = element.tagName.toLowerCase(); 
+ 
+  return [ 
+    "script", 
+    "style", 
+    "noscript", 
+    "textarea", 
+    "input", 
+    "select", 
+    "option", 
+  ].includes(tag); 
+} 
+ 
+function translateDocument(language: AppLanguage) { 
+  if (typeof document === "undefined") return; 
+ 
+  const walker = document.createTreeWalker( 
+    document.body, 
+    NodeFilter.SHOW_TEXT 
+  ); 
+ 
+  const nodes: Text[] = []; 
+ 
+  let current: Node | null; 
+ 
+  while ((current = walker.nextNode())) { 
+    const parent = current.parentElement; 
+ 
+    if (!parent) continue; 
+ 
+    if (shouldSkipElement(parent)) continue; 
+ 
+    nodes.push(current as Text); 
+  } 
+ 
+  nodes.forEach((node) => { 
+    const original = node.textContent || ""; 
+ 
+    const translated = translateText(original, language); 
+ 
+    if (translated !== original) { 
+      node.textContent = translated; 
+    } 
+  }); 
+} 
+ 
+let observer: MutationObserver | null = null; 
+ 
+export function applyGlobalLanguage(language: AppLanguage) { 
+  if (typeof window === "undefined") return; 
+ 
+  localStorage.setItem("app-language", language); 
+ 
+  document.documentElement.lang = 
+    language === "Sinhala" 
+      ? "si" 
+      : language === "Tamil" 
+      ? "ta" 
+      : "en"; 
+ 
+  translateDocument(language); 
+ 
+  if (observer) { 
+    observer.disconnect(); 
+  } 
+ 
+  observer = new MutationObserver(() => { 
+    translateDocument(language); 
+  }); 
+ 
+  observer.observe(document.body, { 
+    childList: true, 
+    subtree: true, 
+  }); 
+ 
+  window.dispatchEvent( 
+    new CustomEvent("language-updated", { 
+      detail: { language }, 
+    }) 
+  ); 
+} 
+ 
+export function applyGlobalAppearance( 
+  theme: "system" | "light" | "dark" 
+) { 
+  if (typeof window === "undefined") return; 
+ 
+  localStorage.setItem("app-theme", theme); 
+ 
+  const root = document.documentElement; 
+ 
+  if (theme === "dark") { 
+    root.setAttribute("data-theme", "dark"); 
+    root.classList.add("dark"); 
+    return; 
+  } 
+ 
+  if (theme === "light") { 
+    root.setAttribute("data-theme", "light"); 
+    root.classList.remove("dark"); 
+    return; 
+  } 
+ 
+  const prefersDark = window.matchMedia( 
+    "(prefers-color-scheme: dark)" 
+  ).matches; 
+ 
+  root.setAttribute( 
+    "data-theme", 
+    prefersDark ? "dark" : "light" 
+  ); 
+ 
+  root.classList.toggle("dark", prefersDark); 
+} 

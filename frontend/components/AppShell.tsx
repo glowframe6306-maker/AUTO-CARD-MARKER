@@ -1,5 +1,6 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { useRouter } from "next/router";
+
 import {
   LayoutDashboard,
   Users,
@@ -21,7 +22,9 @@ import {
   X,
   CircleUserRound,
   ChevronRight,
+  CalendarDays,
 } from "lucide-react";
+
 import { useState, useEffect, useRef } from "react";
 import { authFetch, getApiUrl } from "../lib/api";
 import { useAuth } from "../lib/useAuth";
@@ -1000,6 +1003,8 @@ function SecurityVerificationListener() {
 }
 import { clearAuthToken } from "../lib/api";
 
+const pendingApprovalsCount = 0;
+
 const ownerNavigation = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Members", href: "/members", icon: Users },
@@ -1007,7 +1012,9 @@ const ownerNavigation = [
   { label: "OCR Review", href: "/ocr-review", icon: ScanLine },
   { label: "Receipts", href: "/receipts", icon: Receipt },
   { label: "Reports", href: "/reports", icon: BarChart3 },
-  { label: "Approvals", href: "/approvals", icon: CheckCircle2 },
+  { label: "Approvals", href: "/approvals", icon: CheckCircle2, count: pendingApprovalsCount },
+  { label: "Months Management", href: "/months", icon: CalendarDays },
+    { label: "MONTHLY PAYMENTS", href: "/monthly-payments", icon: CreditCard },
   { label: "Notifications", href: "/notifications", icon: Bell },
 ];
 
@@ -1020,11 +1027,9 @@ const memberNavigation = [
 ];
 
 const administration = [
-  { label: "Security Verification", href: "/security-verification", icon: ShieldCheck },
   { label: "Security Recordings", href: "/security-recordings", icon: Video },
   { label: "Backup", href: "/backup", icon: DatabaseBackup },
   { label: "System Health", href: "/system-health", icon: Activity },
-  { label: "Settings", href: "/settings", icon: Settings },
 ];
 
 export default function AppShell({
@@ -1035,6 +1040,88 @@ export default function AppShell({
   const router = useRouter();
   const { user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPendingApprovalCount = async () => {
+      try {
+        const response = await authFetch(
+          `${getApiUrl()}/api/approvals/pending`
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json();
+
+        const approvals = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.value)
+            ? data.value
+            : [];
+
+        if (!cancelled) {
+          setPendingApprovalCount(approvals.length);
+        }
+      } catch {
+        if (!cancelled) {
+          setPendingApprovalCount(0);
+        }
+      }
+    };
+
+    loadPendingApprovalCount();
+
+    const interval = window.setInterval(
+      loadPendingApprovalCount,
+      10000
+    );
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPendingApprovalsCount() {
+      try {
+        const response = await authFetch(
+          `${getApiUrl()}/api/approvals/pending`
+        );
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const approvals = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.value)
+            ? data.value
+            : [];
+
+        if (!cancelled) {
+          setPendingApprovalsCount(approvals.length);
+        }
+      } catch {
+        if (!cancelled) {
+          setPendingApprovalsCount(0);
+        }
+      }
+    }
+
+    loadPendingApprovalsCount();
+
+    const interval = setInterval(loadPendingApprovalsCount, 10000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
   const isOwner = user?.isOwner === true;
   const navigation = isOwner ? ownerNavigation : memberNavigation;
 
@@ -1079,7 +1166,18 @@ export default function AppShell({
                   <Icon size={18} strokeWidth={2} />
                 </span>
 
-                <span className="sidebar-link-label">{item.label}</span>
+                <span className="sidebar-link-label">
+  {item.label}
+
+  {item.label === "Approvals" && pendingApprovalCount > 0 && (
+    <span
+      className="ml-2 inline-flex min-w-[20px] h-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white"
+      aria-label={`${pendingApprovalCount} pending approvals`}
+    >
+      {pendingApprovalCount > 99 ? "99+" : pendingApprovalCount}
+    </span>
+  )}
+</span>
 
                 {active && (
                   <ChevronRight
@@ -1093,6 +1191,35 @@ export default function AppShell({
           })}
         </nav>
 
+        {/* SECURITY SIDEBAR ITEM START */}
+        <div className="sidebar-section-title administration-title">
+          SECURITY
+        </div>
+
+        <nav className="sidebar-nav">
+          <Link
+            href="/security-verification"
+            className={`sidebar-link ${router.pathname === "/security-verification" ? "active" : ""}`}
+            onClick={() => setMobileOpen(false)}
+          >
+            <span className="sidebar-link-icon">
+              <ShieldCheck size={18} strokeWidth={2} />
+            </span>
+
+            <span className="sidebar-link-label">
+              Security Verification
+            </span>
+
+            {router.pathname === "/security-verification" && (
+              <ChevronRight
+                size={16}
+                className="active-arrow"
+                strokeWidth={2.4}
+              />
+            )}
+          </Link>
+        </nav>
+        {/* SECURITY SIDEBAR ITEM END */}
         {isOwner && (
           <>
             <div className="sidebar-section-title administration-title">
@@ -1115,7 +1242,18 @@ export default function AppShell({
                       <Icon size={18} strokeWidth={2} />
                     </span>
 
-                    <span className="sidebar-link-label">{item.label}</span>
+                    <span className="sidebar-link-label">
+  {item.label}
+
+  {item.label === "Approvals" && pendingApprovalCount > 0 && (
+    <span
+      className="ml-2 inline-flex min-w-[20px] h-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white"
+      aria-label={`${pendingApprovalCount} pending approvals`}
+    >
+      {pendingApprovalCount > 99 ? "99+" : pendingApprovalCount}
+    </span>
+  )}
+</span>
 
                     {active && (
                       <ChevronRight
@@ -1249,6 +1387,18 @@ export default function AppShell({
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

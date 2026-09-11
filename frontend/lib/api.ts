@@ -1,5 +1,5 @@
 ﻿export const getApiUrl = () =>
-  process.env.NEXT_PUBLIC_API_URL || "/api";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export const getAuthToken = () =>
   typeof window !== "undefined"
@@ -42,17 +42,20 @@ export async function authFetch(
   return response;
 }
 
-export const fetcher = async (url: string) => {
-  const response = await authFetch(url);
+export const fetcher = async (
+  url: string,
+  init: RequestInit = {}
+) => {
+  const response = await authFetch(url, init);
 
   if (!response.ok) {
     let message = "Request failed.";
 
     try {
       const body = await response.json();
-      message = body?.error || message;
+      message = body?.error || body?.message || message;
     } catch {
-      // Ignore invalid/non-JSON error responses.
+      // Ignore invalid/non-JSON responses.
     }
 
     throw new Error(message);
@@ -60,4 +63,3 @@ export const fetcher = async (url: string) => {
 
   return response.json();
 };
-

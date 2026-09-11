@@ -1,0 +1,149 @@
+import { useEffect, useState } from "react";
+import { fetcher, getApiUrl } from "../lib/api";
+import { useAuth } from "../lib/useAuth";
+
+export default function MemberDashboard() {
+  const { user, isLoading } = useAuth();
+  const [member, setMember] = useState<any>(null);
+  const [paymentsSummary, setPaymentsSummary] = useState<any>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user || isLoading) return;
+    // load member profile
+    fetcher(`${getApiUrl()}/api/members/me`)
+      .then(setMember)
+      .catch((err) => setError(err.message));
+
+    // load notifications
+    fetcher(`${getApiUrl()}/api/notifications`)
+      .then(setNotifications)
+      .catch(() => {});
+  }, [user, isLoading]);
+
+  useEffect(() => {
+    if (!member) return;
+    // load payment summary
+    fetcher(`${getApiUrl()}/api/payments/member/${member.memberId}/summary`)
+      .then(setPaymentsSummary)
+      .catch(() => {});
+  }, [member]);
+
+  if (!user && !isLoading) {
+    if (typeof window !== "undefined") window.location.href = "/";
+    return null;
+  }
+
+  // Wait for auth to finish
+  if (isLoading) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">Checking authentication...</main>
+    );
+  }
+
+  const roles: string[] = user?.roles || [];
+  const isOwner = !!user?.isOwner;
+  const adminRoles = ["OWNER", "CHIEF_OWNER", "SUPER_ADMIN", "ADMINISTRATOR", "ADMIN"];
+
+  // If admin/owner, redirect to admin dashboard
+  if (isOwner || roles.some((r) => adminRoles.includes(r))) {
+    if (typeof window !== "undefined") window.location.href = "/dashboard";
+    return null;
+  }
+
+  // Only members allowed beyond this point
+  const isMember = roles.includes("MEMBER") || !!user?.memberProfile;
+  if (!isMember) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-950">
+        <div className="mx-auto max-w-4xl">
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">Access denied: your account does not have member access.</div>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-950">
+      <div className="mx-auto max-w-4xl space-y-6">
+        <header className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl flex items-center justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-brand-600">Member Dashboard</p>
+            <h1 className="mt-2 text-2xl font-semibold text-slate-950">Welcome{user?.fullName ? `, ${user.fullName}` : ""}</h1>
+            <p className="mt-1 text-sm text-slate-600">Account ID: {user?.accountId} — Status: {user?.status ?? "--"}</p>
+          </div>
+        </header>
+
+        {error && <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+
+        <section className="grid gap-6 md:grid-cols-2">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">Overview</h2>
+            <div className="mt-4 space-y-2 text-sm text-slate-700">
+              <p><strong>Name:</strong> {member?.fullName ?? user?.fullName ?? "--"}</p>
+              <p><strong>Account ID:</strong> {user?.accountId ?? "--"}</p>
+              <p><strong>RC Student ID:</strong> {member?.memberId ?? user?.memberProfile?.memberId ?? "--"}</p>
+              <p><strong>Account status:</strong> {user?.status ?? "--"}</p>
+              <p><strong>Current balance:</strong> Rs. {paymentsSummary?.balanceRupees ?? paymentsSummary?.balance?.balanceRupees ?? "--"}</p>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">My Profile</h2>
+            <div className="mt-4 text-sm text-slate-700 space-y-2">
+              <p><strong>Name:</strong> {member?.fullName ?? user?.fullName ?? "--"}</p>
+              <p><strong>RC Student ID:</strong> {member?.memberId ?? "--"}</p>
+              <p><strong>Email:</strong> {user?.email ?? "--"}</p>
+              <p><strong>Date of Birth:</strong> {member?.dob ? new Date(member.dob).toLocaleDateString() : "--"}</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-6 md:grid-cols-2">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">Monthly Payments</h2>
+            <div className="mt-4 text-sm text-slate-700">
+              {paymentsSummary ? (
+                <div>
+                  <p><strong>Total Paid:</strong> Rs. {paymentsSummary.totalPaid ?? paymentsSummary.balance?.totalPaid ?? "--"}</p>
+                  <p><strong>Paid weeks:</strong> {paymentsSummary.paidWeeks ?? paymentsSummary.balance?.paidWeeks ?? "--"}</p>
+                  <p className="mt-3 font-medium">Recent payments:</p>
+                  <ul className="mt-2 list-disc pl-5 space-y-2">
+                    {(paymentsSummary.payments || []).slice(0,5).map((p: any) => (
+                      <li key={p.id}>{p.month} — Rs. {p.paymentAmount} — {new Date(p.paymentDate).toLocaleDateString()}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-600">Loading payments...</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">Notifications</h2>
+            <div className="mt-4 text-sm text-slate-700">
+              {notifications.length ? (
+                notifications.slice(0,5).map((n) => (
+                  <div key={n.id} className="mb-3">
+                    <p className="font-medium">{n.title}</p>
+                    <p className="text-sm text-slate-600">{n.message}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-600">No recent notifications.</p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <div className="space-y-3">
+          <a href="/profile" className="inline-block rounded-2xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white">View Profile</a>
+          <a href="/payments" className="inline-block rounded-2xl border px-4 py-2 text-sm">View Payments</a>
+          <a href="/notifications" className="inline-block rounded-2xl border px-4 py-2 text-sm">Notifications</a>
+        </div>
+      </div>
+    </main>
+  );
+}

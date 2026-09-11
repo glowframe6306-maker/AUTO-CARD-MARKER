@@ -1,0 +1,587 @@
+﻿import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../lib/useAuth";
+import { authFetch, getApiUrl } from "../lib/api";
+import {
+  Users,
+  CreditCard,
+  LogIn,
+  LogOut,
+  Bell,
+  RefreshCw,
+  CheckCircle2,
+  Clock3,
+  Wallet,
+} from "lucide-react";
+
+type DashboardData = {
+  totalMembers: number;
+  activeMembers: number;
+  inactiveMembers: number;
+
+  paidMembersThisMonth: number;
+  unpaidMembersThisMonth: number;
+
+  weeklyAmount: number;
+  weeksPerMonth: number;
+  monthlyAmount: number;
+
+  monthlyCollection: number;
+  expectedMonthlyCollection: number;
+  remainingMonthlyCollection: number;
+
+  totalCollection: number;
+  unpaidPayments: number;
+  pendingRequestsCount: number;
+
+  recentPayments: any[];
+  recentLoginLogout: any[];
+  recentActivity: any[];
+
+  dashboardMonth: string;
+};
+
+export default function Dashboard() {
+  const { user, isLoading } = useAuth();
+
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const loadDashboard = useCallback(async () => {
+    if (!user || user.isOwner !== true) return;
+
+    try {
+      setIsRefreshing(true);
+      setError(null);
+
+      const resp = await authFetch(
+        `${getApiUrl()}/api/reports/dashboard`
+      );
+
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(
+          body?.error || "Unable to load dashboard."
+        );
+      }
+
+      const json = await resp.json();
+
+      setData(json);
+      setLastUpdated(new Date());
+    } catch (err: any) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : String(err)
+      );
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (!user) {
+      window.location.href = "/";
+      return;
+    }
+
+    if (user.isOwner !== true) {
+      window.location.href = "/member-dashboard";
+      return;
+    }
+
+    loadDashboard();
+
+    /*
+     * LIVE DASHBOARD
+     *
+     * Refresh every 5 seconds.
+     * When a payment becomes COMPLETED,
+     * the dashboard automatically reflects it.
+     */
+    const interval = window.setInterval(() => {
+      loadDashboard();
+    }, 5000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [user, isLoading, loadDashboard]);
+
+  async function logout() {
+    try {
+      await authFetch(`${getApiUrl()}/api/auth/logout`, {
+        method: "POST",
+      });
+    } catch {
+      // Continue local logout.
+    }
+
+    localStorage.removeItem("authToken");
+    window.location.href = "/";
+  }
+
+  const money = (value: number | undefined) =>
+    `Rs. ${Number(value ?? 0).toLocaleString("en-LK")}`;
+
+  const totalMembers = data?.totalMembers ?? 0;
+  const paidMembers = data?.paidMembersThisMonth ?? 0;
+  const unpaidMembers = data?.unpaidMembersThisMonth ?? 0;
+
+  const paidPercentage =
+    totalMembers > 0
+      ? Math.min(
+          100,
+          Math.round((paidMembers / totalMembers) * 100)
+        )
+      : 0;
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-950">
+      <div className="mx-auto max-w-7xl space-y-8">
+
+        {/* HEADER */}
+        <header className="flex flex-col gap-4 rounded-[32px] border border-slate-200 bg-white p-8 shadow-xl sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <p className="text-sm uppercase tracking-[0.24em] text-brand-600">
+                Readers Circle Management
+              </p>
+
+              <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                LIVE
+              </span>
+            </div>
+
+            <h1 className="mt-3 text-3xl font-semibold text-slate-950">
+              AUTO MONTHLY CARD PAYMENT MARKING SYSTEM
+            </h1>
+
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              Owner dashboard with live monthly member payment
+              tracking and secure role-based access.
+            </p>
+
+            {data?.dashboardMonth && (
+              <p className="mt-2 text-sm font-medium text-slate-500">
+                Current Month: {data.dashboardMonth}
+              </p>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={loadDashboard}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            >
+              <RefreshCw
+                size={17}
+                className={isRefreshing ? "animate-spin" : ""}
+              />
+              Refresh
+            </button>
+
+            <button
+              onClick={logout}
+              className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-700"
+            >
+              Sign out
+            </button>
+          </div>
+        </header>
+
+        {/* LIVE MONTHLY SUMMARY */}
+        <section className="grid gap-6 md:grid-cols-3">
+
+          {/* REGISTERED MEMBERS */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 p-3 text-white shadow-md">
+                <Users size={28} />
+              </div>
+
+              <div className="flex-1">
+                <p className="text-sm uppercase tracking-[0.20em] text-slate-500">
+                  Total Registered Members
+                </p>
+
+                <p className="mt-3 text-4xl font-extrabold text-slate-950">
+                  {data ? totalMembers.toLocaleString() : "--"}
+                </p>
+
+                <p className="mt-1 text-sm text-slate-600">
+                  All registered members
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* PAID MEMBERS */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-gradient-to-br from-emerald-400 to-green-600 p-3 text-white shadow-md">
+                <CheckCircle2 size={28} />
+              </div>
+
+              <div className="flex-1">
+                <p className="text-sm uppercase tracking-[0.20em] text-slate-500">
+                  Paid This Month
+                </p>
+
+                <p className="mt-3 text-4xl font-extrabold text-emerald-600">
+                  {data ? paidMembers.toLocaleString() : "--"}
+                </p>
+
+                <p className="mt-1 text-sm text-slate-600">
+                  {paidPercentage}% of registered members
+                </p>
+
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                    style={{
+                      width: `${paidPercentage}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* UNPAID MEMBERS */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-gradient-to-br from-orange-400 to-red-500 p-3 text-white shadow-md">
+                <Clock3 size={28} />
+              </div>
+
+              <div className="flex-1">
+                <p className="text-sm uppercase tracking-[0.20em] text-slate-500">
+                  Unpaid This Month
+                </p>
+
+                <p
+                  className={`mt-3 text-4xl font-extrabold ${
+                    unpaidMembers > 0
+                      ? "text-red-600"
+                      : "text-emerald-600"
+                  }`}
+                >
+                  {data ? unpaidMembers.toLocaleString() : "--"}
+                </p>
+
+                <p className="mt-1 text-sm text-slate-600">
+                  Members remaining to pay
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* MONEY SUMMARY */}
+        <section className="grid gap-6 md:grid-cols-3">
+
+          {/* MONTHLY COLLECTION */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 p-3 text-white shadow-md">
+                <CreditCard size={28} />
+              </div>
+
+              <div className="flex-1">
+                <p className="text-sm uppercase tracking-[0.20em] text-slate-500">
+                  Monthly Collection
+                </p>
+
+                <p className="mt-3 text-3xl font-extrabold text-slate-950">
+                  {data ? money(data.monthlyCollection) : "--"}
+                </p>
+
+                <p className="mt-1 text-sm text-slate-600">
+                  Actually collected this month
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* EXPECTED */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-gradient-to-br from-blue-500 to-indigo-700 p-3 text-white shadow-md">
+                <Wallet size={28} />
+              </div>
+
+              <div className="flex-1">
+                <p className="text-sm uppercase tracking-[0.20em] text-slate-500">
+                  Expected Collection
+                </p>
+
+                <p className="mt-3 text-3xl font-extrabold text-slate-950">
+                  {data ? money(data.expectedMonthlyCollection) : "--"}
+                </p>
+
+                <p className="mt-1 text-sm text-slate-600">
+                  {money(data?.monthlyAmount)} ×{" "}
+                  {totalMembers.toLocaleString()} members
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* REMAINING */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 p-3 text-white shadow-md">
+                <Wallet size={28} />
+              </div>
+
+              <div className="flex-1">
+                <p className="text-sm uppercase tracking-[0.20em] text-slate-500">
+                  Remaining Collection
+                </p>
+
+                <p className="mt-3 text-3xl font-extrabold text-orange-600">
+                  {data ? money(data.remainingMonthlyCollection) : "--"}
+                </p>
+
+                <p className="mt-1 text-sm text-slate-600">
+                  Expected from unpaid members
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* PAYMENT RULE */}
+        <section className="rounded-3xl border border-blue-100 bg-blue-50 p-6 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-700">
+                Current Monthly Payment Rule
+              </p>
+
+              <p className="mt-2 text-xl font-bold text-slate-950">
+                {data
+                  ? `${money(data.weeklyAmount)} × ${data.weeksPerMonth} weeks = ${money(data.monthlyAmount)} / member / month`
+                  : "Loading..."}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-white px-5 py-3 text-center shadow-sm">
+              <p className="text-xs uppercase tracking-wider text-slate-500">
+                Live Update
+              </p>
+
+              <p className="mt-1 text-sm font-bold text-emerald-600">
+                Every 5 seconds
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* RECENT PAYMENTS + LOGIN */}
+        <section className="grid gap-6 lg:grid-cols-2">
+
+          {/* RECENT PAYMENTS */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 p-3 text-white shadow-md">
+                <CreditCard size={20} />
+              </div>
+
+              <div>
+                <p className="text-sm uppercase tracking-[0.20em] text-slate-500">
+                  Recent Payments
+                </p>
+
+                <p className="mt-1 text-sm text-slate-600">
+                  Latest received payments
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              {data?.recentPayments?.length ? (
+                data.recentPayments.map((payment: any) => (
+                  <div
+                    key={
+                      payment.id ??
+                      `${payment.memberId}-${payment.paymentDate}`
+                    }
+                    className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-3"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">
+                        {payment.memberName
+                          ? `${payment.memberName} (ID ${payment.memberId})`
+                          : `Member ID ${payment.memberId}`}
+                      </p>
+
+                      <p className="mt-1 text-sm text-slate-600">
+                        {payment.account ?? "Account"} •{" "}
+                        {money(payment.paymentAmount)} •{" "}
+                        {new Date(
+                          payment.paymentDate
+                        ).toLocaleString()}
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <p
+                        className={`text-sm font-semibold ${
+                          payment.status === "FAILED"
+                            ? "text-red-600"
+                            : "text-emerald-600"
+                        }`}
+                      >
+                        {payment.status
+                          ? payment.status.toUpperCase()
+                          : "OK"}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                  <p className="text-sm text-slate-600">
+                    No recent payments available.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* LOGIN / LOGOUT */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-gradient-to-br from-indigo-600 to-blue-800 p-3 text-white shadow-md">
+                <LogIn size={20} />
+              </div>
+
+              <div>
+                <p className="text-sm uppercase tracking-[0.20em] text-slate-500">
+                  Recent Login & Logout
+                </p>
+
+                <p className="mt-1 text-sm text-slate-600">
+                  System authentication events
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              {data?.recentLoginLogout?.length ? (
+                data.recentLoginLogout.map(
+                  (ev: any, idx: number) => {
+                    const isLogin =
+                      (
+                        ev.type ||
+                        ev.action ||
+                        ev.event ||
+                        ""
+                      )
+                        .toString()
+                        .toLowerCase()
+                        .includes("login");
+
+                    const label = isLogin
+                      ? "LOGIN"
+                      : "LOGOUT";
+
+                    return (
+                      <div
+                        key={ev.id ?? idx}
+                        className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`rounded-full p-2 ${
+                              isLogin
+                                ? "bg-indigo-100 text-indigo-700"
+                                : "bg-sky-100 text-sky-700"
+                            }`}
+                          >
+                            {isLogin ? (
+                              <LogIn size={16} />
+                            ) : (
+                              <LogOut size={16} />
+                            )}
+                          </div>
+
+                          <div>
+                            <p className="text-sm font-medium text-slate-900">
+                              {ev.userName ??
+                                ev.memberName ??
+                                `User ${
+                                  ev.userId ??
+                                  ev.memberId ??
+                                  ""
+                                }`}
+                            </p>
+
+                            <p className="mt-1 text-sm text-slate-600">
+                              {new Date(
+                                ev.timestamp ??
+                                  ev.time ??
+                                  ev.date ??
+                                  ev.createdAt ??
+                                  Date.now()
+                              ).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div
+                          className={`text-sm font-semibold ${
+                            isLogin
+                              ? "text-indigo-600"
+                              : "text-sky-600"
+                          }`}
+                        >
+                          {label}
+                        </div>
+                      </div>
+                    );
+                  }
+                )
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                  <p className="text-sm text-slate-600">
+                    No login or logout events found.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* FOOTER STATUS */}
+        <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-500" />
+            Dashboard is monitoring payment changes live.
+          </div>
+
+          <div>
+            Last updated:{" "}
+            {lastUpdated
+              ? lastUpdated.toLocaleTimeString()
+              : "Loading..."}
+          </div>
+        </div>
+
+        {error && (
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}

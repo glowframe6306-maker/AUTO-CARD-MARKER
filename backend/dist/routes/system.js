@@ -23,4 +23,28 @@ router.get("/security", (0, authMiddleware_1.requireAnyRole)(["OWNER", "SUPER_AD
     const devices = await prisma_1.default.device.findMany({ orderBy: { lastActive: "desc" }, take: 50 });
     return res.json({ events, devices });
 });
+router.get("/academic-years", async (req, res) => {
+    try {
+        const academicYears = await prisma_1.default.academicYear.findMany({
+            orderBy: {
+                year: "desc",
+            },
+            select: {
+                id: true,
+                year: true,
+                name: true,
+                startDate: true,
+                endDate: true,
+                isCurrent: true,
+            },
+        });
+        return res.json(academicYears);
+    }
+    catch (error) {
+        console.error("Failed to load academic years:", error);
+        return res.status(500).json({
+            error: "Failed to load academic years.",
+        });
+    }
+});
 exports.default = router;

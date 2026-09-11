@@ -1,0 +1,193 @@
+﻿import { FormEvent, useState } from "react";
+import { getApiUrl } from "../lib/api";
+
+export default function RegisterPage() {
+  const [name, setName] = useState("");
+  const [rcStudentId, setRcStudentId] = useState("");
+  const [email, setEmail] = useState("");
+  const [dob, setDob] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    setError("");
+    setMessage("");
+
+    const payload = {
+      name: name.trim(),
+      rcStudentId: rcStudentId.trim(),
+      email: email.trim().toLowerCase(),
+      dob: dob,
+      password,
+    };
+
+    if (
+      !payload.name ||
+      !payload.rcStudentId ||
+      !payload.email ||
+      !payload.dob ||
+      !payload.password ||
+      !confirmPassword
+    ) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+
+    if (payload.password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const url = `${getApiUrl()}/api/registrations`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const raw = await response.text();
+
+      let data: any = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+
+      console.log("[REGISTRATION]", {
+        url,
+        status: response.status,
+        contentType: response.headers.get("content-type"),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message || data?.error || raw || `Registration failed with HTTP ${response.status}`
+        );
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.message || data?.error || "Registration failed.");
+      }
+
+      setMessage(data?.message || "YOUR REGISTER DETAILS WAS SENT TO MANAGEMENT TEAM.");
+
+      setName("");
+      setRcStudentId("");
+      setEmail("");
+      setDob("");
+      setPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Registration failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-950">
+      <div className="mx-auto max-w-2xl">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h1 className="text-2xl font-semibold">Register</h1>
+
+          <p className="mt-2 text-sm text-slate-600">
+            Complete your registration.
+          </p>
+
+          {error && (
+            <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {message && (
+            <div className="mt-5 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+              {message}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <label className="block">
+              <span className="text-sm font-medium">NAME</span>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">RC STUDENT ID</span>
+              <input
+                value={rcStudentId}
+                onChange={(e) => setRcStudentId(e.target.value)}
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">EMAIL ADDRESS</span>
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                type="email"
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">DATE OF BIRTH</span>
+              <input
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+                type="date"
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">PASSWORD</span>
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">
+                CONFIRM PASSWORD
+              </span>
+              <input
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                type="password"
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+              />
+            </label>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitting ? "REGISTERING..." : "REGISTER"}
+            </button>
+          </form>
+        </div>
+      </div>
+    </main>
+  );
+}

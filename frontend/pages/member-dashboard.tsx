@@ -1,0 +1,662 @@
+﻿import { useEffect, useState } from "react";
+import { User, CreditCard, X } from "lucide-react";
+import { fetcher, getApiUrl } from "../lib/api";
+import { useAuth } from "../lib/useAuth";
+
+export default function MemberDashboard() {
+  const { user, isLoading } = useAuth();
+
+  const [member, setMember] = useState<any>(null);
+  const [paymentsSummary, setPaymentsSummary] = useState<any>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [showPaymentPopup, setShowPaymentPopup] = useState(false);
+  const [paymentMonth, setPaymentMonth] = useState(String(new Date().getMonth() + 1));
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentCardFile, setPaymentCardFile] = useState<File | null>(null);
+  const [paymentNotes, setPaymentNotes] = useState("");
+
+  useEffect(() => {
+    if (isLoading || !user) return;
+
+    fetcher(`${getApiUrl()}/api/members/me`)
+      .then(setMember)
+      .catch((err) => {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load member profile."
+        );
+      });
+
+    fetcher(`${getApiUrl()}/api/notifications`)
+      .then(setNotifications)
+      .catch(() => {});
+  }, [user, isLoading]);
+
+  useEffect(() => {
+    if (!member?.memberId) return;
+
+    fetcher(
+      `${getApiUrl()}/api/payments/member/${member.memberId}/summary`
+    )
+      .then(setPaymentsSummary)
+      .catch(() => {});
+  }, [member]);
+
+  /*
+   * ONLY the real Owner goes to Owner Dashboard.
+   * Every other authenticated account remains on Member Dashboard.
+   */
+  useEffect(() => {
+    if (isLoading || !user) return;
+
+    if (user.isOwner === true) {
+      window.location.href = "/dashboard";
+    }
+  }, [user, isLoading]);
+
+  if (isLoading) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-slate-50">
+        <p className="text-slate-600">Checking authentication...</p>
+      </main>
+    );
+  }
+
+  if (!user) {
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    }
+
+    return null;
+  }
+
+  if (user.isOwner === true) {
+    return null;
+  }
+
+  const memberId =
+    member?.memberId ??
+    user.memberProfile?.memberId ??
+    "--";
+
+  const fullName =
+    member?.fullName ??
+    user.fullName ??
+    "--";
+
+  const balance =
+    paymentsSummary?.balanceRupees ??
+    paymentsSummary?.balance?.balanceRupees ??
+    "--";
+
+  const totalPaid =
+    paymentsSummary?.totalPaid ??
+    paymentsSummary?.balance?.totalPaid ??
+    "--";
+
+  const paidWeeks =
+    paymentsSummary?.paidWeeks ??
+    paymentsSummary?.balance?.paidWeeks ??
+    "--";
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-950">
+      <div className="mx-auto max-w-4xl space-y-6">
+
+        <header className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl">
+          <div className="flex items-center justify-between gap-4">
+
+            <div>
+              <p className="text-sm uppercase tracking-[0.24em] text-brand-600">
+                Member Dashboard
+              </p>
+
+              <h1 className="mt-2 text-2xl font-semibold text-slate-950">
+                Welcome{user.fullName ? `, ${user.fullName}` : ""}
+              </h1>
+
+              <p className="mt-1 text-sm text-slate-600">
+                Account ID: {user.accountId ?? "--"} — Status:{" "}
+                {user.status ?? "--"}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowPaymentPopup(true)}
+              className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:scale-[1.02] hover:opacity-90"
+            >
+              <CreditCard size={18} />
+              PAY
+            </button>
+
+          </div>
+        </header>
+
+        <section className="member-info-card mt-6">
+          <div className="mb-4 flex items-start justify-between">
+
+            <h2 className="flex items-center text-sm font-semibold text-white">
+              <User className="mr-3" size={18} />
+              Member Information
+            </h2>
+
+            <div>
+              {user.status ? (
+                <span
+                  className={`status-badge ${
+                    user.status === "ACTIVE"
+                      ? "status-active"
+                      : user.status === "INACTIVE"
+                      ? "status-inactive"
+                      : user.status === "PENDING"
+                      ? "status-pending"
+                      : "status-pending"
+                  }`}
+                >
+                  {user.status}
+                </span>
+              ) : null}
+            </div>
+
+          </div>
+
+          <div className="member-info-grid">
+
+            <div className="member-field">
+              <div className="member-label">RC No</div>
+              <div className="member-value rc">{memberId}</div>
+            </div>
+
+            <div className="member-field">
+              <div className="member-label">Full Name</div>
+              <div className="member-value name">{fullName}</div>
+            </div>
+
+            <div className="member-field">
+              <div className="member-label">Account ID</div>
+              <div className="member-value account">
+                {user.accountId ?? "--"}
+              </div>
+            </div>
+
+            <div className="member-field">
+              <div className="member-label">Role</div>
+              <div className="member-value">
+                {user.roles
+                  ?.map((r: any) => r.role?.name)
+                  .join(", ") ||
+                  user.role ||
+                  user.roleName ||
+                  "--"}
+              </div>
+            </div>
+
+            <div className="member-field">
+              <div className="member-label">Status</div>
+              <div className="member-value">
+                {user.status ?? "--"}
+              </div>
+            </div>
+
+            <div className="member-field">
+              <div className="member-label">Member Since</div>
+              <div className="member-value">
+                {member?.createdAt
+                  ? new Date(member.createdAt).toLocaleDateString()
+                  : user.createdAt
+                  ? new Date(user.createdAt).toLocaleDateString()
+                  : "--"}
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        {error && (
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <section className="grid gap-6 md:grid-cols-2">
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+
+            <h2 className="text-lg font-semibold text-slate-900">
+              Overview
+            </h2>
+
+            <div className="mt-4 space-y-2 text-sm text-slate-700">
+
+              <p>
+                <strong>Name:</strong> {fullName}
+              </p>
+
+              <p>
+                <strong>Account ID:</strong>{" "}
+                {user.accountId ?? "--"}
+              </p>
+
+              <p>
+                <strong>RC Student ID:</strong> {memberId}
+              </p>
+
+              <p>
+                <strong>Account status:</strong>{" "}
+                {user.status ?? "--"}
+              </p>
+
+              <p>
+                <strong>Current balance:</strong> Rs. {balance}
+              </p>
+
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+
+            <h2 className="text-lg font-semibold text-slate-900">
+              My Profile
+            </h2>
+
+            <div className="mt-4 space-y-2 text-sm text-slate-700">
+
+              <p>
+                <strong>Name:</strong> {fullName}
+              </p>
+
+              <p>
+                <strong>RC Student ID:</strong> {memberId}
+              </p>
+
+              <p>
+                <strong>Email:</strong> {user.email ?? "--"}
+              </p>
+
+              <p>
+                <strong>Date of Birth:</strong>{" "}
+                {member?.dob
+                  ? new Date(member.dob).toLocaleDateString()
+                  : "--"}
+              </p>
+
+            </div>
+          </div>
+
+        </section>
+
+        <section className="grid gap-6 md:grid-cols-2">
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+
+            <div className="flex items-center justify-between">
+
+              <h2 className="text-lg font-semibold text-slate-900">
+                Monthly Payments
+              </h2>
+
+              <button
+                type="button"
+                onClick={() => setShowPaymentPopup(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white shadow-md transition hover:scale-[1.02] hover:opacity-90"
+              >
+                <CreditCard size={18} />
+                PAY FOR MONTH
+              </button>
+
+            </div>
+
+            <div className="mt-4 text-sm text-slate-700">
+
+              {paymentsSummary ? (
+                <div>
+
+                  <p>
+                    <strong>Total Paid:</strong>{" "}
+                    Rs. {totalPaid}
+                  </p>
+
+                  <p>
+                    <strong>Paid weeks:</strong>{" "}
+                    {paidWeeks}
+                  </p>
+
+                  <p className="mt-3 font-medium">
+                    Recent payments:
+                  </p>
+
+                  <ul className="mt-2 list-disc space-y-2 pl-5">
+
+                    {(paymentsSummary.payments || [])
+                      .slice(0, 5)
+                      .map((p: any) => (
+                        <li key={p.id}>
+                          {p.month} — Rs. {p.paymentAmount} —{" "}
+                          {p.paymentDate
+                            ? new Date(
+                                p.paymentDate
+                              ).toLocaleDateString()
+                            : "--"}
+                        </li>
+                      ))}
+
+                  </ul>
+
+                </div>
+              ) : (
+                <p className="text-sm text-slate-600">
+                  Loading payments...
+                </p>
+              )}
+
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+
+            <h2 className="text-lg font-semibold text-slate-900">
+              Notifications
+            </h2>
+
+            <div className="mt-4 text-sm text-slate-700">
+
+              {notifications.length ? (
+                notifications.slice(0, 5).map((n: any) => (
+                  <div key={n.id} className="mb-3">
+
+                    <p className="font-medium">
+                      {n.title}
+                    </p>
+
+                    <p className="text-sm text-slate-600">
+                      {n.message}
+                    </p>
+
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-600">
+                  No recent notifications.
+                </p>
+              )}
+
+            </div>
+          </div>
+
+        </section>
+
+        <div className="flex flex-wrap gap-3">
+
+          <button
+            type="button"
+            onClick={() => setShowPaymentPopup(true)}
+            className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-6 py-3 text-sm font-bold text-white shadow-lg hover:opacity-90"
+          >
+            <CreditCard size={18} />
+            PAY
+          </button>
+
+          <a
+            href="/profile"
+            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900"
+          >
+            View Profile
+          </a>
+
+          <a
+            href="/payments"
+            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900"
+          >
+            View Payments
+          </a>
+
+          <a
+            href="/notifications"
+            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900"
+          >
+            Notifications
+          </a>
+
+        </div>
+
+      </div>
+
+      {showPaymentPopup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowPaymentPopup(false)}
+        >
+          <div
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+
+            <div className="flex items-center justify-between">
+
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">
+                  Make Payment
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Pay monthly card payment
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowPaymentPopup(false)}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
+                aria-label="Close payment popup"
+              >
+                <X size={20} />
+              </button>
+
+            </div>
+
+            <div className="mt-6 space-y-4">
+
+              {/* FULL NAME */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Full Name
+                </label>
+
+                <input
+                  type="text"
+                  value={fullName}
+                  readOnly
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+                />
+              </div>
+
+              {/* GRADE */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Grade
+                </label>
+
+                <input
+                  type="text"
+                  value={
+                    member?.grade ??
+                    member?.className ??
+                    member?.class ??
+                    user.grade ??
+                    user.className ??
+                    ""
+                  }
+                  readOnly
+                  placeholder="Grade"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+                />
+              </div>
+
+              {/* MONTH */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Month
+                </label>
+
+                <select
+                  value={paymentMonth}
+                  onChange={(e) => setPaymentMonth(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-brand-500"
+                >
+                  <option value="1">January</option>
+                  <option value="2">February</option>
+                  <option value="3">March</option>
+                  <option value="4">April</option>
+                  <option value="5">May</option>
+                  <option value="6">June</option>
+                  <option value="7">July</option>
+                  <option value="8">August</option>
+                  <option value="9">September</option>
+                  <option value="10">October</option>
+                  <option value="11">November</option>
+                  <option value="12">December</option>
+                </select>
+              </div>
+
+              {/* AMOUNT */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Amount (Rs.)
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  placeholder="Enter amount"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-brand-500"
+                />
+              </div>
+
+              {/* UPLOAD CARD */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Upload Card
+                </label>
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) =>
+                    setPaymentCardFile(e.target.files?.[0] ?? null)
+                  }
+                  className="block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium"
+                />
+
+                {paymentCardFile && (
+                  <p className="mt-2 text-xs text-emerald-600">
+                    Selected: {paymentCardFile.name}
+                  </p>
+                )}
+              </div>
+
+              {/* NOTES */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Notes
+                </label>
+
+                <textarea
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                  rows={4}
+                  placeholder="Enter notes..."
+                  className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-brand-500"
+                />
+              </div>
+
+            </div>
+
+            <div className="mt-6 flex gap-3">
+
+              <button
+                type="button"
+                onClick={() => setShowPaymentPopup(false)}
+                className="flex-1 rounded-2xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!paymentAmount) {
+                    alert("Please enter the payment amount.");
+                    return;
+                  }
+
+                  if (!paymentCardFile) {
+                    alert("Please upload the card image.");
+                    return;
+                  }
+
+                  if (!member?.memberId) {
+                    alert("Member profile is not loaded yet.");
+                    return;
+                  }
+
+                  try {
+                    const formData = new FormData();
+
+                    formData.append("month", paymentMonth);
+                    formData.append("amount", paymentAmount);
+                    formData.append("note", paymentNotes);
+                    formData.append("card", paymentCardFile);
+
+                    const data = await fetcher(
+                      `${getApiUrl()}/api/payments/requests`,
+                      {
+                        method: "POST",
+                        body: formData,
+                      }
+                    );
+
+                    alert(
+                      "Payment request submitted successfully. It is now waiting for Owner review."
+                    );
+
+                    setShowPaymentPopup(false);
+                    setPaymentAmount("");
+                    setPaymentCardFile(null);
+                    setPaymentNotes("");
+
+                    fetcher(
+                      `${getApiUrl()}/api/payments/member/${member.memberId}/summary`
+                    )
+                      .then(setPaymentsSummary)
+                      .catch(() => {});
+                  } catch (err) {
+                    alert(
+                      err instanceof Error
+                        ? err.message
+                        : "Unable to submit payment request."
+                    );
+                  }
+                }}
+                className="flex-1 rounded-2xl bg-brand-600 px-5 py-3 font-bold text-white shadow-lg transition hover:opacity-90"
+              >
+                Continue to Payment
+              </button>
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+    </main>
+  );
+}
+
+
+
+

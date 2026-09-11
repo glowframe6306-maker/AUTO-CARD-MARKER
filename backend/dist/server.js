@@ -15,6 +15,7 @@ const auth_1 = __importDefault(require("./routes/auth"));
 const members_1 = __importDefault(require("./routes/members"));
 const payments_1 = __importDefault(require("./routes/payments"));
 const cards_1 = __importDefault(require("./routes/cards"));
+const paymentRequests_1 = __importDefault(require("./routes/paymentRequests"));
 const approvals_1 = __importDefault(require("./routes/approvals"));
 const reports_1 = __importDefault(require("./routes/reports"));
 const system_1 = __importDefault(require("./routes/system"));
@@ -26,12 +27,22 @@ const backup_1 = __importDefault(require("./routes/backup"));
 const auditLogs_1 = __importDefault(require("./routes/auditLogs"));
 const receipts_1 = __importDefault(require("./routes/receipts"));
 const verification_1 = __importDefault(require("./routes/verification"));
+const registrations_1 = __importDefault(require("./routes/registrations"));
+const months_1 = __importDefault(require("./routes/months"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const port = Number(process.env.APP_PORT || 8000);
 const staticUploadPath = path_1.default.join(__dirname, "../../uploads/secure");
 app.use((0, helmet_1.default)());
-app.use((0, cors_1.default)({ origin: process.env.FRONTEND_URL?.split(",") || ["http://localhost:3000"], credentials: true }));
+const corsOrigins = process.env.FRONTEND_URL?.split(",") || ["http://localhost:3000"];
+app.use((0, cors_1.default)({
+    origin: corsOrigins,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+    exposedHeaders: ["Authorization"],
+}));
+app.options("*", (0, cors_1.default)({ origin: corsOrigins, credentials: true }));
 app.use(express_1.default.json({ limit: "10mb" }));
 app.use(express_1.default.urlencoded({ extended: true, limit: "10mb" }));
 app.use((0, cookie_parser_1.default)());
@@ -47,6 +58,7 @@ app.use("/uploads", express_1.default.static(staticUploadPath));
 app.use("/api/auth", auth_1.default);
 app.use("/api/members", members_1.default);
 app.use("/api/payments", payments_1.default);
+app.use("/api/payments/requests", paymentRequests_1.default);
 app.use("/api/cards", cards_1.default);
 app.use("/api/approvals", approvals_1.default);
 app.use("/api/reports", reports_1.default);
@@ -59,6 +71,8 @@ app.use("/api/backup", backup_1.default);
 app.use("/api/audit-logs", auditLogs_1.default);
 app.use("/api/receipts", receipts_1.default);
 app.use("/api/verification", verification_1.default);
+app.use("/api/registrations", registrations_1.default);
+app.use("/api/months", months_1.default);
 app.get("/health", (req, res) => res.json({ status: "ok", backend: "online" }));
 app.use((err, req, res, next) => {
     console.error(err);

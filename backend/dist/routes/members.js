@@ -63,6 +63,25 @@ router.get("/", (0, authMiddleware_1.requirePermission)("manage_members"), async
         skip: (Number(page) - 1) * Number(pageSize),
         take: Number(pageSize),
         orderBy: { createdAt: "desc" },
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    accountId: true,
+                    email: true,
+                    fullName: true,
+                    status: true,
+                    isOwner: true,
+                    roles: {
+                        include: {
+                            role: {
+                                select: { name: true }
+                            }
+                        }
+                    }
+                }
+            }
+        },
     });
     const count = await prisma_1.default.memberProfile.count({ where });
     return res.json({ data: members, count });
@@ -214,8 +233,8 @@ router.get("/:memberId/details", authMiddleware_1.authenticate, async (req, res)
     const member = await prisma_1.default.memberProfile.findUnique({ where: { memberId }, include: { user: true } });
     if (!member)
         return res.status(404).json({ error: "Member not found." });
-    const isAdmin = req.user?.isOwner || req.user?.roles.some((role) => ["SUPER_ADMIN", "ADMINISTRATOR", "ADMIN"].includes(role));
-    if (!isAdmin && member.userId !== req.user?.id) {
+    const isOwner = req.user?.isOwner === true;
+    if (!isOwner && member.userId !== req.user?.id) {
         return res.status(403).json({ error: "Forbidden" });
     }
     const payments = await prisma_1.default.payment.findMany({ where: { memberId: member.id }, orderBy: { paymentDate: "desc" } });
@@ -245,9 +264,211 @@ router.get("/:memberId", authMiddleware_1.authenticate, async (req, res) => {
     if (!currentUser) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    if (!currentUser.isOwner && !currentUser.roles.includes("OWNER") && !currentUser.roles.includes("SUPER_ADMIN") && !currentUser.roles.includes("ADMINISTRATOR") && !currentUser.roles.includes("ADMIN") && member.userId !== currentUser.id) {
+    if (currentUser.isOwner !== true && member.userId !== currentUser.id) {
         return res.status(403).json({ error: "Forbidden" });
     }
     return res.json(member);
+});
+/*
+ * OWNER MEMBER MANAGEMENT
+ * Block / Unblock / Activate / Deactivate / Delete
+ */
+router.post("/:memberId/block", (0, authMiddleware_1.requirePermission)("manage_members"), async (req, res) => {
+    const { memberId } = req.params;
+    if (!req.user?.isOwner) {
+        return res.status(403).json({ error: "Only the Owner can block members." });
+    }
+    const member = await prisma_1.default.memberProfile.findUnique({
+        where: { memberId },
+        include: { user: true },
+    });
+    if (!member) {
+        return res.status(404).json({ error: "Member not found." });
+    }
+    if (member.user.isOwner) {
+        return res.status(403).json({ error: "The Owner account cannot be blocked." });
+    }
+    await prisma_1.default.$transaction([
+        prisma_1.default.user.update({
+            where: { id: member.userId },
+            data: { status: "BLOCKED" },
+        }),
+        prisma_1.default.memberProfile.update({
+            where: { memberId },
+            data: { status: "SUSPENDED" },
+        }),
+        prisma_1.default.auditLog.create({
+            data: {
+                actorId: req.user.id,
+                actorRole: req.user.roles.join(","),
+                action: "BLOCK_MEMBER",
+                targetType: "MEMBER",
+                targetId: memberId,
+                status: "SUCCESS",
+                oldValue: {
+                    userStatus: member.user.status,
+                    memberStatus: member.status,
+                },
+                newValue: {
+                    userStatus: "BLOCKED",
+                    memberStatus: "SUSPENDED",
+                },
+            },
+        }),
+    ]);
+    return res.json({
+        message: "Member blocked successfully.",
+    });
+});
+router.post("/:memberId/unblock", (0, authMiddleware_1.requirePermission)("manage_members"), async (req, res) => {
+    const { memberId } = req.params;
+    if (!req.user?.isOwner) {
+        return res.status(403).json({ error: "Only the Owner can unblock members." });
+    }
+    const member = await prisma_1.default.memberProfile.findUnique({
+        where: { memberId },
+        include: { user: true },
+    });
+    if (!member) {
+        return res.status(404).json({ error: "Member not found." });
+    }
+    if (member.user.isOwner) {
+        return res.status(403).json({ error: "The Owner account cannot be modified." });
+    }
+    await prisma_1.default.$transaction([
+        prisma_1.default.user.update({
+            where: { id: member.userId },
+            data: { status: "ACTIVE" },
+        }),
+        prisma_1.default.memberProfile.update({
+            where: { memberId },
+            data: { status: "ACTIVE" },
+        }),
+        prisma_1.default.auditLog.create({
+            data: {
+                actorId: req.user.id,
+                actorRole: req.user.roles.join(","),
+                action: "UNBLOCK_MEMBER",
+                targetType: "MEMBER",
+                targetId: memberId,
+                status: "SUCCESS",
+                oldValue: {
+                    userStatus: member.user.status,
+                    memberStatus: member.status,
+                },
+                newValue: {
+                    userStatus: "ACTIVE",
+                    memberStatus: "ACTIVE",
+                },
+            },
+        }),
+    ]);
+    return res.json({
+        message: "Member unblocked successfully.",
+    });
+});
+router.post("/:memberId/activate", (0, authMiddleware_1.requirePermission)("manage_members"), async (req, res) => {
+    const { memberId } = req.params;
+    if (!req.user?.isOwner) {
+        return res.status(403).json({ error: "Only the Owner can activate members." });
+    }
+    const member = await prisma_1.default.memberProfile.findUnique({
+        where: { memberId },
+        include: { user: true },
+    });
+    if (!member) {
+        return res.status(404).json({ error: "Member not found." });
+    }
+    if (member.user.isOwner) {
+        return res.status(403).json({ error: "The Owner account cannot be modified." });
+    }
+    await prisma_1.default.$transaction([
+        prisma_1.default.user.update({
+            where: { id: member.userId },
+            data: { status: "ACTIVE" },
+        }),
+        prisma_1.default.memberProfile.update({
+            where: { memberId },
+            data: { status: "ACTIVE" },
+        }),
+    ]);
+    return res.json({
+        message: "Member activated successfully.",
+    });
+});
+router.post("/:memberId/deactivate", (0, authMiddleware_1.requirePermission)("manage_members"), async (req, res) => {
+    const { memberId } = req.params;
+    if (!req.user?.isOwner) {
+        return res.status(403).json({ error: "Only the Owner can deactivate members." });
+    }
+    const member = await prisma_1.default.memberProfile.findUnique({
+        where: { memberId },
+        include: { user: true },
+    });
+    if (!member) {
+        return res.status(404).json({ error: "Member not found." });
+    }
+    if (member.user.isOwner) {
+        return res.status(403).json({ error: "The Owner account cannot be modified." });
+    }
+    await prisma_1.default.$transaction([
+        prisma_1.default.user.update({
+            where: { id: member.userId },
+            data: { status: "INACTIVE" },
+        }),
+        prisma_1.default.memberProfile.update({
+            where: { memberId },
+            data: { status: "INACTIVE" },
+        }),
+    ]);
+    return res.json({
+        message: "Member deactivated successfully.",
+    });
+});
+router.delete("/:memberId", (0, authMiddleware_1.requirePermission)("manage_members"), async (req, res) => {
+    const { memberId } = req.params;
+    if (!req.user?.isOwner) {
+        return res.status(403).json({ error: "Only the Owner can delete members." });
+    }
+    const member = await prisma_1.default.memberProfile.findUnique({
+        where: { memberId },
+        include: { user: true },
+    });
+    if (!member) {
+        return res.status(404).json({ error: "Member not found." });
+    }
+    if (member.user.isOwner) {
+        return res.status(403).json({ error: "The Owner account cannot be deleted." });
+    }
+    /*
+     * Safety check:
+     * Never allow the permanent Owner account to be deleted.
+     */
+    await prisma_1.default.$transaction(async (tx) => {
+        await tx.memberProfile.delete({
+            where: { memberId },
+        });
+        await tx.user.delete({
+            where: { id: member.userId },
+        });
+        await tx.auditLog.create({
+            data: {
+                actorId: req.user.id,
+                actorRole: req.user.roles.join(","),
+                action: "DELETE_MEMBER",
+                targetType: "MEMBER",
+                targetId: memberId,
+                status: "SUCCESS",
+                oldValue: {
+                    accountId: member.user.accountId,
+                    fullName: member.user.fullName,
+                    email: member.user.email,
+                },
+            },
+        });
+    });
+    return res.json({
+        message: "Member deleted successfully.",
+    });
 });
 exports.default = router;

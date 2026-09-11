@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import { authenticate, requireAnyRole, AuthorizedRequest } from "../middleware/authMiddleware";
 import prisma from "../prisma";
 import fs from "fs";
@@ -23,4 +23,30 @@ router.get("/security", requireAnyRole(["OWNER", "SUPER_ADMIN"]), async (req: Au
   return res.json({ events, devices });
 });
 
+
+router.get("/academic-years", async (req: AuthorizedRequest, res) => {
+  try {
+    const academicYears = await prisma.academicYear.findMany({
+      orderBy: {
+        year: "desc",
+      },
+      select: {
+        id: true,
+        year: true,
+        name: true,
+        startDate: true,
+        endDate: true,
+        isCurrent: true,
+      },
+    });
+
+    return res.json(academicYears);
+  } catch (error) {
+    console.error("Failed to load academic years:", error);
+    return res.status(500).json({
+      error: "Failed to load academic years.",
+    });
+  }
+});
 export default router;
+

@@ -1,0 +1,530 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import { fetcher, getApiUrl } from "../lib/api";
+
+type Member = {
+  memberId?: string;
+  id?: string;
+  rcNo?: string;
+  rcNumber?: string;
+  fullName?: string;
+  name?: string;
+  accountId?: string;
+  accountID?: string;
+  role?: string;
+  position?: string;
+  grade?: string;
+  status?: string;
+};
+
+export default function Members() {
+  const [members, setMembers] = useState<Member[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [roleFilter, setRoleFilter] = useState("ALL");
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+
+  const loadMembers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const res = await fetcher(`${getApiUrl()}/api/members`);
+      setMembers(res.data || []);
+    } catch (err: any) {
+      setError(err?.message || "Unable to load members.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMembers();
+  }, []);
+
+  const getId = (member: Member) =>
+    String(member.memberId || member.id || "");
+
+  const getName = (member: Member) =>
+    member.fullName || member.name || "—";
+
+  const getRc = (member: Member) =>
+    member.rcNo || member.rcNumber || member.memberId || "—";
+
+  const getAccountId = (member: Member) =>
+    member.accountId || member.accountID || "—";
+
+  const getRole = (member: Member) =>
+    member.role || member.position || "Member";
+
+  const getStatus = (member: Member) =>
+    String(member.status || "ACTIVE").toUpperCase();
+
+  const roles = useMemo(() => {
+    return Array.from(
+      new Set(members.map((member) => getRole(member)))
+    ).sort();
+  }, [members]);
+
+  const filteredMembers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return members.filter((member) => {
+      const matchesSearch =
+        !query ||
+        getRc(member).toLowerCase().includes(query) ||
+        getName(member).toLowerCase().includes(query) ||
+        getAccountId(member).toLowerCase().includes(query) ||
+        getRole(member).toLowerCase().includes(query);
+
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        getStatus(member) === statusFilter;
+
+      const matchesRole =
+        roleFilter === "ALL" ||
+        getRole(member) === roleFilter;
+
+      return matchesSearch && matchesStatus && matchesRole;
+    });
+  }, [members, search, statusFilter, roleFilter]);
+
+  const totalMembers = members.length;
+
+  const activeMembers = members.filter(
+    (member) =>
+      ["ACTIVE", "ACTIVATED"].includes(getStatus(member))
+  ).length;
+
+  const inactiveMembers = members.filter(
+    (member) =>
+      ["INACTIVE", "DEACTIVATED"].includes(getStatus(member))
+  ).length;
+
+  const blockedMembers = members.filter(
+    (member) => getStatus(member) === "BLOCKED"
+  ).length;
+
+  const pendingMembers = members.filter(
+    (member) => getStatus(member) === "PENDING"
+  ).length;
+
+  return (
+    <div className="space-y-6">
+
+      {/* PAGE HEADER */}
+      <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
+              Owner Control Center
+            </p>
+
+            <h1 className="mt-1 text-3xl font-bold text-slate-950">
+              Members
+            </h1>
+
+            <p className="mt-2 text-sm text-slate-600">
+              Manage member accounts, access, roles, and account status.
+            </p>
+          </div>
+
+          <button
+            onClick={loadMembers}
+            className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          >
+            Refresh Members
+          </button>
+        </div>
+      </header>
+
+      {/* ERROR */}
+      {error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* SUMMARY */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+
+        <SummaryCard
+          title="Total Members"
+          value={totalMembers}
+          description="All registered members"
+        />
+
+        <SummaryCard
+          title="Active"
+          value={activeMembers}
+          description="Currently active"
+        />
+
+        <SummaryCard
+          title="Inactive"
+          value={inactiveMembers}
+          description="Currently inactive"
+        />
+
+        <SummaryCard
+          title="Blocked"
+          value={blockedMembers}
+          description="Access blocked"
+        />
+
+        <SummaryCard
+          title="Pending"
+          value={pendingMembers}
+          description="Waiting for action"
+        />
+
+      </section>
+
+      {/* MEMBER DETAILS */}
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+
+        <div className="border-b border-slate-200 p-5">
+
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+
+            <div>
+              <h2 className="text-xl font-bold text-slate-950">
+                Members Details
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                {filteredMembers.length} member
+                {filteredMembers.length === 1 ? "" : "s"} shown
+              </p>
+            </div>
+
+            {/* SEARCH */}
+            <div className="w-full xl:max-w-md">
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search RC No, name, Account ID, role..."
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              />
+            </div>
+
+          </div>
+
+          {/* FILTERS */}
+          <div className="mt-4 flex flex-wrap gap-3">
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-800"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+              <option value="BLOCKED">Blocked</option>
+              <option value="PENDING">Pending</option>
+            </select>
+
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-800"
+            >
+              <option value="ALL">All Roles</option>
+
+              {roles.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+
+            {(search || statusFilter !== "ALL" || roleFilter !== "ALL") && (
+              <button
+                onClick={() => {
+                  setSearch("");
+                  setStatusFilter("ALL");
+                  setRoleFilter("ALL");
+                }}
+                className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Clear Filters
+              </button>
+            )}
+
+          </div>
+
+        </div>
+
+        {/* TABLE */}
+        <div className="overflow-x-auto">
+
+          {loading ? (
+            <div className="p-8 text-center text-sm text-slate-500">
+              Loading members...
+            </div>
+          ) : filteredMembers.length ? (
+
+            <table className="min-w-[1000px] w-full text-left">
+
+              <thead className="bg-slate-50">
+
+                <tr className="border-b border-slate-200">
+
+                  <th className="px-5 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    RC No
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Full Name
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Account ID
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Role
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Status
+                  </th>
+
+                  <th className="px-5 py-4 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Actions
+                  </th>
+
+                </tr>
+
+              </thead>
+
+              <tbody>
+
+                {filteredMembers.map((member) => {
+
+                  const id = getId(member);
+                  const status = getStatus(member);
+
+                  return (
+                    <tr
+                      key={id}
+                      className="border-b border-slate-100 transition hover:bg-slate-50"
+                    >
+
+                      <td className="px-5 py-4 text-sm font-semibold text-slate-900">
+                        {getRc(member)}
+                      </td>
+
+                      <td className="px-5 py-4">
+
+                        <div className="font-semibold text-slate-900">
+                          {getName(member)}
+                        </div>
+
+                        {member.grade && (
+                          <div className="mt-1 text-xs text-slate-500">
+                            Grade: {member.grade}
+                          </div>
+                        )}
+
+                      </td>
+
+                      <td className="px-5 py-4 font-mono text-sm text-slate-700">
+                        {getAccountId(member)}
+                      </td>
+
+                      <td className="px-5 py-4">
+
+                        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                          {getRole(member)}
+                        </span>
+
+                      </td>
+
+                      <td className="px-5 py-4">
+
+                        <StatusBadge status={status} />
+
+                      </td>
+
+                      <td className="relative px-5 py-4 text-right">
+
+                        <button
+                          onClick={() =>
+                            setOpenMenu(openMenu === id ? null : id)
+                          }
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-700 shadow-sm hover:bg-slate-50"
+                          aria-label="Member actions"
+                        >
+                          ⋮
+                        </button>
+
+                        {openMenu === id && (
+                          <div className="absolute right-5 top-14 z-30 w-52 rounded-2xl border border-slate-200 bg-white p-2 text-left shadow-xl">
+
+                            <button
+                              onClick={() => {
+                                setOpenMenu(null);
+                                alert(
+                                  `Member details:\n\nRC No: ${getRc(member)}\nName: ${getName(member)}\nAccount ID: ${getAccountId(member)}\nRole: ${getRole(member)}\nStatus: ${status}`
+                                );
+                              }}
+                              className="w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100"
+                            >
+                              View Details
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setOpenMenu(null);
+                                alert("Edit action will be connected to the backend.");
+                              }}
+                              className="w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100"
+                            >
+                              Edit Member
+                            </button>
+
+                            {status === "BLOCKED" ? (
+                              <button
+                                onClick={() => {
+                                  setOpenMenu(null);
+                                  alert("Unblock action will be connected to the backend.");
+                                }}
+                                className="w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+                              >
+                                Unblock Account
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setOpenMenu(null);
+                                  alert("Block action will be connected to the backend.");
+                                }}
+                                className="w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-amber-700 hover:bg-amber-50"
+                              >
+                                Block Account
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => {
+                                setOpenMenu(null);
+                                alert("Password reset action will be connected to the backend.");
+                              }}
+                              className="w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-blue-700 hover:bg-blue-50"
+                            >
+                              Reset Password
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setOpenMenu(null);
+                                alert("Activity / audit logs will be connected to the backend.");
+                              }}
+                              className="w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100"
+                            >
+                              Activity & Audit Logs
+                            </button>
+
+                            <div className="my-1 border-t border-slate-100" />
+
+                            <button
+                              onClick={() => {
+                                setOpenMenu(null);
+                                alert("Delete action will only be enabled after backend safety checks are confirmed.");
+                              }}
+                              className="w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50"
+                            >
+                              Delete Account
+                            </button>
+
+                          </div>
+                        )}
+
+                      </td>
+
+                    </tr>
+                  );
+                })}
+
+              </tbody>
+
+            </table>
+
+          ) : (
+
+            <div className="p-10 text-center">
+
+              <div className="text-4xl">👥</div>
+
+              <h3 className="mt-3 font-semibold text-slate-900">
+                No members found
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Try changing your search or filters.
+              </p>
+
+            </div>
+
+          )}
+
+        </div>
+
+      </section>
+
+    </div>
+  );
+}
+
+function SummaryCard({
+  title,
+  value,
+  description,
+}: {
+  title: string;
+  value: number;
+  description: string;
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
+
+      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+        {title}
+      </p>
+
+      <p className="mt-3 text-3xl font-bold text-slate-950">
+        {value}
+      </p>
+
+      <p className="mt-1 text-xs text-slate-500">
+        {description}
+      </p>
+
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const normalized = status.toUpperCase();
+
+  const classes =
+    normalized === "ACTIVE" || normalized === "ACTIVATED"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : normalized === "BLOCKED"
+      ? "bg-red-50 text-red-700 border-red-200"
+      : normalized === "PENDING"
+      ? "bg-amber-50 text-amber-700 border-amber-200"
+      : "bg-slate-100 text-slate-700 border-slate-200";
+
+  return (
+    <span
+      className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${classes}`}
+    >
+      {status}
+    </span>
+  );
+}

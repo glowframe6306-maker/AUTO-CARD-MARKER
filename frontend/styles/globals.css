@@ -647,3 +647,364 @@ tbody td {
     padding-left: 7px;
   }
 }
+/* =========================================
+   AUTO CARD MARKING - GLOBAL THEME SYSTEM
+   ========================================= */
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] body {
+  background: #020617 !important;
+  color: #f8fafc !important;
+}
+
+/* Cards */
+html[data-theme="dark"] .bg-white {
+  background-color: #0f172a !important;
+}
+
+html[data-theme="dark"] .bg-slate-50 {
+  background-color: #111827 !important;
+}
+
+html[data-theme="dark"] .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+
+/* Text */
+html[data-theme="dark"] .text-slate-950,
+html[data-theme="dark"] .text-slate-900 {
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] .text-slate-800,
+html[data-theme="dark"] .text-slate-700 {
+  color: #e2e8f0 !important;
+}
+
+html[data-theme="dark"] .text-slate-600,
+html[data-theme="dark"] .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+/* Borders */
+html[data-theme="dark"] .border-slate-200,
+html[data-theme="dark"] .border-slate-300 {
+  border-color: #334155 !important;
+}
+
+/* Inputs */
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: #475569 !important;
+}
+
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Disabled inputs */
+html[data-theme="dark"] input:disabled {
+  background-color: #1e293b !important;
+  color: #64748b !important;
+}
+
+/* Hover */
+html[data-theme="dark"] .hover\:bg-slate-100:hover {
+  background-color: #1e293b !important;
+}
+
+html[data-theme="dark"] .hover\:bg-slate-800:hover {
+  background-color: #334155 !important;
+}
+
+/* Buttons */
+html[data-theme="dark"] button {
+  color: inherit;
+}
+
+/* =========================================================
+   APP SHELL CLASS COMPATIBILITY
+   Matches the current AppShell.tsx class names
+   ========================================================= */
+
+.app-layout {
+  min-height: 100vh;
+  display: flex;
+}
+
+.desktop-sidebar {
+  width: 280px;
+  flex: 0 0 280px;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  color: #e2e8f0;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(10, 18, 35, 0.98),
+      rgba(3, 8, 20, 0.99)
+    );
+  border-right: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow: 18px 0 55px rgba(0, 0, 0, 0.22);
+}
+
+.brand-area {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 7px 9px 23px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.brand-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb, #06b6d4);
+  box-shadow:
+    0 10px 30px rgba(37, 99, 235, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.brand-title {
+  color: #f8fafc;
+  font-size: 0.93rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+
+.brand-subtitle {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.sidebar-link-icon {
+  width: 24px;
+  min-width: 24px;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+}
+
+.sidebar-link.active .sidebar-link-icon {
+  color: #67e8f9;
+}
+
+.sidebar-link-label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.active-arrow {
+  color: #67e8f9;
+}
+
+.sidebar-bottom {
+  padding-top: 13px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.security-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.security-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.security-copy strong {
+  color: #d1fae5;
+  font-size: 0.75rem;
+}
+
+.security-copy span {
+  color: #64748b;
+  font-size: 0.65rem;
+}
+
+.security-dot {
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.8);
+}
+
+@media (max-width: 900px) {
+  .desktop-sidebar {
+    display: none;
+  }
+}
+
+/* =========================================================
+   APP SHELL CLASS COMPATIBILITY
+   Matches the current AppShell.tsx class names
+   ========================================================= */
+
+.app-layout {
+  min-height: 100vh;
+  display: flex;
+}
+
+.desktop-sidebar {
+  width: 280px;
+  flex: 0 0 280px;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  color: #e2e8f0;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(10, 18, 35, 0.98),
+      rgba(3, 8, 20, 0.99)
+    );
+  border-right: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow: 18px 0 55px rgba(0, 0, 0, 0.22);
+}
+
+.brand-area {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 7px 9px 23px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.brand-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb, #06b6d4);
+  box-shadow:
+    0 10px 30px rgba(37, 99, 235, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.brand-title {
+  color: #f8fafc;
+  font-size: 0.93rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+
+.brand-subtitle {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.sidebar-link-icon {
+  width: 24px;
+  min-width: 24px;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+}
+
+.sidebar-link.active .sidebar-link-icon {
+  color: #67e8f9;
+}
+
+.sidebar-link-label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.active-arrow {
+  color: #67e8f9;
+}
+
+.sidebar-bottom {
+  padding-top: 13px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.security-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.security-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.security-copy strong {
+  color: #d1fae5;
+  font-size: 0.75rem;
+}
+
+.security-copy span {
+  color: #64748b;
+  font-size: 0.65rem;
+}
+
+.security-dot {
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.8);
+}
+
+@media (max-width: 900px) {
+  .desktop-sidebar {
+    display: none;
+  }
+}

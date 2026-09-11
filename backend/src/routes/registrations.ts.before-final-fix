@@ -1,0 +1,218 @@
+﻿import { Router } from "express";
+import path from "path";
+import prisma from "../prisma";
+import { hashPassword } from "../utils/auth";
+import { authenticate, AuthorizedRequest } from "../middleware/authMiddleware";
+
+const router = Router();
+
+const storageDir = path.join(__dirname, "../../uploads/registrations");
+
+if (!fs.existsSync(storageDir)) {
+  fs.mkdirSync(storageDir, { recursive: true });
+}
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, callback) => {
+      callback(null, storageDir);
+    },
+    filename: (_req, file, callback) => {
+      const extension = path.extname(file.originalname).toLowerCase() || ".jpg";
+      const filename = `registration-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 10)}${extension}`;
+
+      callback(null, filename);
+    },
+  }),
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, callback) => {
+    const allowedTypes = new Set(["image/jpeg", "image/png"]);
+
+    if (!allowedTypes.has(file.mimetype)) {
+      callback(new Error("Only JPEG and PNG images are allowed."));
+      return;
+    }
+
+    callback(null, true);
+  },
+});
+
+const deleteUploadedFile = (file?: Express.Multer.File) => {
+  if (file?.path && fs.existsSync(file.path)) {
+    try {
+      fs.unlinkSync(file.path);
+    } catch {
+      // Ignore cleanup failure.
+    }
+  }
+};
+
+router.post("/", async (req, res) => {
+  try {
+    const { name, rcStudentId, email, dob, password } = req.body;
+if (!name || !rcStudentId || !email || !dob || !password) {
+return res.status(400).json({
+        error: "Missing required registration fields.",
+      });
+    }
+
+
+    const normalizedName = String(name).trim();
+    const normalizedRcStudentId = String(rcStudentId).trim();
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const parsedDob = new Date(String(dob));
+
+    if (!normalizedName || !normalizedRcStudentId || !normalizedEmail) {
+return res.status(400).json({
+        error: "All registration fields are required.",
+      });
+    }
+
+    if (Number.isNaN(parsedDob.getTime())) {
+return res.status(400).json({
+        error: "Invalid date of birth.",
+      });
+    }
+
+    const [
+      existingUserByAccount,
+      existingUserByEmail,
+      existingMember,
+      existingPending,
+    ] = await Promise.all([
+      prisma.user.findUnique({
+        where: { accountId: normalizedRcStudentId },
+        select: { id: true },
+      }),
+      prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: { id: true },
+      }),
+      prisma.memberProfile.findUnique({
+        where: { memberId: normalizedRcStudentId },
+        select: { id: true },
+      }),
+      prisma.pendingRegistration.findUnique({
+        where: { rcStudentId: normalizedRcStudentId },
+        select: { id: true, status: true },
+      }),
+    ]);
+
+    if (existingUserByAccount || existingMember || existingPending) {
+return res.status(409).json({
+        error:
+          "An account or pending registration with that RC Student ID already exists.",
+      });
+    }
+
+    if (existingUserByEmail) {
+return res.status(409).json({
+        error: "Email already in use.",
+      });
+    }
+
+    const passwordHash = await hashPassword(String(password));
+
+    const pendingRegistration = await prisma.pendingRegistration.create({
+      data: {
+        name: normalizedName,
+        rcStudentId: normalizedRcStudentId,
+        email: normalizedEmail,
+        dob: parsedDob,
+        passwordHash,
+      },
+    });
+
+    const requestId = `REG-${Date.now()}-${Math.floor(
+      Math.random() * 100000
+    )}`;
+
+    await prisma.approvalRequest.create({
+      data: {
+        requestId,
+        requesterId: null,
+        requesterRole: "PUBLIC",
+        actionType: "CREATE",
+        targetType: "REGISTRATION",
+        targetId: String(pendingRegistration.id),
+        oldValue: {},
+        newValue: {
+          name: pendingRegistration.name,
+          rcStudentId: pendingRegistration.rcStudentId,
+          email: pendingRegistration.email,
+          dob: pendingRegistration.dob.toISOString(),
+        },
+        reason: "New member registration",
+      },
+    });
+
+    return res.status(201).json({
+      message: "YOUR REGISTER DETAILS WAS SENT TO MANAGEMENT TEAM.",
+      registrationId: pendingRegistration.id,
+      requestId,
+      status: "PENDING",
+    });
+  } catch (error) {
+    console.error("Registration submission error:", error);
+
+    deleteUploadedFile(req.file);
+
+    return res.status(500).json({
+      error: "Failed to submit registration.",
+    });
+  }
+});
+
+router.get("/:id", authenticate, async (req: AuthorizedRequest, res) => {
+  try {
+    if (!req.user?.isOwner) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const id = Number(req.params.id);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        error: "Invalid registration ID.",
+      });
+    }
+
+    const registration = await prisma.pendingRegistration.findUnique({
+      where: { id },
+    });
+
+    if (!registration) {
+      return res.status(404).json({
+        error: "Registration not found.",
+      });
+    }
+
+    return res.json({
+      id: registration.id,
+      name: registration.name,
+      rcStudentId: registration.rcStudentId,
+      email: registration.email,
+      dob: registration.dob,
+      imagePath: registration.imagePath,
+      status: registration.status,
+      createdAt: registration.createdAt,
+      approvedAt: registration.approvedAt,
+    });
+  } catch (error) {
+    console.error("Registration details error:", error);
+
+    return res.status(500).json({
+      error: "Failed to retrieve registration.",
+    });
+  }
+});
+
+export default router;
+
+
+
+

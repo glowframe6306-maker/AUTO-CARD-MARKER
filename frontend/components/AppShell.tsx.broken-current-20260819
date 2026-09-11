@@ -1,0 +1,461 @@
+﻿import Link from "next/link";
+import { useRouter } from "next/router";
+
+import {
+  LayoutDashboard,
+  Users,
+  CreditCard,
+  ScanLine,
+  Receipt,
+  BarChart3,
+  CheckCircle2,
+  Bell,
+  Megaphone,
+  UserCog,
+  ShieldCheck,
+  Video,
+  DatabaseBackup,
+  Settings,
+  Activity,
+  LogOut,
+  Menu,
+  X,
+  CircleUserRound,
+  ChevronRight,
+  CalendarDays,
+} from "lucide-react";
+
+import { useState, useEffect, useRef } from "react";
+import { authFetch, getApiUrl } from "../lib/api";
+import { useAuth } from "../lib/useAuth";
+import { getMediaStream, initMediaStream, isStreamUsable, mediaStreamRef } from "../lib/media";
+
+function SecurityVerificationListener() {
+  // Security requests that already exist when the member logs in/refreshes
+  // are NOT actionable. Only requests discovered after the baseline is
+  // established can open the verification popup.
+  const securityVerificationBaselineLoadedRef = useRef(false);
+  const securityVerificationSeenNotificationIdsRef = useRef<Set<string>>(new Set());
+
+  const securityVerificationListenerStartedAtRef = useRef(Date.now());
+
+  // Prevent the same security-verification session from opening
+  // the member popup repeatedly during notification polling.
+  const securityVerificationShownSessionsRef = useRef<Set<number>>(new Set());
+  const { user } = useAuth();
+  // Camera + microphone permission is requested by the login page
+  // after successful authentication. AppShell must NOT request it
+  // automatically when the dashboard loads.
+  const [polling, setPolling] = useState(true);
+  const [modal, setModal] = useState<any>(null);
+  const [runningPopup, setRunningPopup] = useState<{ visible: boolean; secondsLeft: number; sessionId?: number } | null>(null);
+  const [completionPopup, setCompletionPopup] = useState<{ visible: boolean; sessionId?: number } | null>(null);
+  const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
+  const [modalDoNotShowAgain, setModalDoNotShowAgain] = useState(false);
+  const handledSessionsRef = useRef<Set<number>>(new Set());
+  const activeRecordingSessionsRef = useRef<Set<number>>(new Set());
+  const alwaysAllowRef = useRef(false);
+  const neverAllowRef = useRef(false);
+  const runningPopupDisabledRef = useRef(false);
+  const completionPopupDisabledRef = useRef(false);
+  
+
+  function loadSecurityPermissionState() {
+    try {
+      alwaysAllowRef.current = localStorage.getItem("securityVerificationAlwaysAllow") === "true";
+      neverAllowRef.current = localStorage.getItem("securityVerificationNeverAllow") === "true";
+    } catch {
+      alwaysAllowRef.current = false;
+      neverAllowRef.current = false;
+    }
+  }
+
+  async function persistDevicePermission(cameraPermission: boolean, micPermission: boolean, deniedAt?: string | null) {
+    try {
+      await authFetch(`${getApiUrl()}/api/verification/device/permission`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          svCameraPermission: cameraPermission,
+          svMicPermission: micPermission,
+          svPermissionDeniedAt: deniedAt ?? null,
+        }),
+      });
+    } catch (error) {
+      console.error("Failed to persist device permission status", error);
+    }
+  }
+
+  async function checkMemberDevicePermissions() {
+    try {
+      const response = await authFetch(`${getApiUrl()}/api/verification/device/status`);
+      if (!response.ok) return;
+      const status = await response.json();
+      const cameraAllowed = Boolean(status?.svCameraPermission);
+      const micAllowed = Boolean(status?.svMicPermission);
+      const hasPermission = cameraAllowed && micAllowed;
+
+      // Do not show any custom permission UI here. The Security Verification
+      // page itself is responsible for requesting native browser permissions
+      // via getUserMedia. We only return the status so callers may use it.
+      return hasPermission;
+    } catch (error) {
+      console.error("Failed to load verification device permissions", error);
+      return false;
+    }
+  }
+  function getDeviceIdentifierFromToken() {
+    try {
+      const token = localStorage.getItem("authToken");
+      if (!token) return null;
+      const parts = token.split(".");
+      if (parts.length < 2) return null;
+      const payload = JSON.parse(atob(parts[1]));
+      return payload.deviceIdentifier || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function getRequestPopupKey(uId: number | string | undefined) {
+    try {
+      const id = uId ?? (user?.id ?? "guest");
+      return `securityVerificationRequestPopupDisabled:${id}`;
+    } catch {
+      return `securityVerificationRequestPopupDisabled:guest`;
+    }
+  }
+
+  function getRequestConsentKey(uId: number | string | undefined) {
+    try {
+      const id = uId ?? (user?.id ?? "guest");
+      return `securityVerificationRequestConsent:${id}`;
+    } catch {
+      return `securityVerificationRequestConsent:guest`;
+    }
+  }
+
+  async function syncDevicePermissionState() {
+    try {
+      const response = await authFetch(`${getApiUrl()}/api/verification/device/status`);
+      if (!response.ok) return;
+      const state = await response.json();
+      const granted = !!state?.svCameraPermission && !!state?.svMicPermission;
+      // Do not show any custom permission modal here. The page will handle
+      // native permission prompts itself.
+      return granted;
+    } catch {
+      return false;
+    }
+  }
+
+  async function allowCameraMicrophone() {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      await authFetch(`${getApiUrl()}/api/verification/device/permission`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ svCameraPermission: true, svMicPermission: true, svPermissionDeniedAt: null }),
+      });
+      
+    } catch {
+      try {
+        await authFetch(`${getApiUrl()}/api/verification/device/permission`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ svCameraPermission: false, svMicPermission: false, svPermissionDeniedAt: new Date().toISOString() }),
+        });
+      } catch {
+        // ignore
+      }
+      
+    }
+}
+
+
+  const isOwner = user?.isOwner === true;
+  const navigation = isOwner ? ownerNavigation : memberNavigation;
+
+  if (router.pathname === "/") {
+    return <>{children}</>;
+  }
+
+  function logout() {
+    clearAuthToken();
+    window.location.href = "/";
+  }
+
+  const SidebarContent = () => (
+    <div className="sidebar-inner">
+      <div className="brand-area">
+        <div className="brand-icon">
+          <CreditCard size={22} strokeWidth={2.2} />
+        </div>
+
+        <div className="brand-copy">
+          <div className="brand-title">AUTO CARD</div>
+          <div className="brand-subtitle">MARKING SYSTEM</div>
+        </div>
+      </div>
+
+      <div className="sidebar-scroll">
+        <div className="sidebar-section-title">MAIN</div>
+
+        <nav className="sidebar-nav">
+          {navigation.map((item) => {
+            const Icon = item.icon;
+            const active = router.pathname === item.href;
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`sidebar-link ${active ? "active" : ""}`}
+                onClick={() => setMobileOpen(false)}
+              >
+                <span className="sidebar-link-icon">
+                  <Icon size={18} strokeWidth={2} />
+                </span>
+
+                <span className="sidebar-link-label">
+  {item.label}
+</span>
+
+                {active && (
+                  <ChevronRight
+                    size={16}
+                    className="active-arrow"
+                    strokeWidth={2.4}
+                  />
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {isOwner && (
+          <>
+            <div className="sidebar-section-title administration-title">
+              ADMINISTRATION
+            </div>
+
+            <nav className="sidebar-nav">
+              {administration.map((item) => {
+                const Icon = item.icon;
+                const active = router.pathname === item.href;
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`sidebar-link ${active ? "active" : ""}`}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <span className="sidebar-link-icon">
+                      <Icon size={18} strokeWidth={2} />
+                    </span>
+
+                    <span className="sidebar-link-label">
+  {item.label}
+</span>
+
+                    {active && (
+                      <ChevronRight
+                        size={16}
+                        className="active-arrow"
+                        strokeWidth={2.4}
+                      />
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+          </>
+        )}
+      </div>
+
+        <div className="sidebar-section-title">
+          SETTINGS
+        </div>
+
+        <nav className="sidebar-nav">
+          <Link
+            href="/settings"
+            className={`sidebar-link ${router.pathname === "/settings" ? "active" : ""}`}
+            onClick={() => setMobileOpen(false)}
+          >
+            <span className="sidebar-link-icon">
+              <Settings size={18} strokeWidth={2} />
+            </span>
+
+            <span className="sidebar-link-label">Settings</span>
+
+            {router.pathname === "/settings" && (
+              <ChevronRight
+                size={16}
+                className="active-arrow"
+                strokeWidth={2.4}
+              />
+            )}
+          </Link>
+        </nav>
+      <div className="sidebar-bottom">
+        <div className="security-card">
+          <div className="security-icon">
+            <ShieldCheck size={18} strokeWidth={2.2} />
+          </div>
+
+          <div className="security-copy">
+            <strong>System Secure</strong>
+            <span>All services operational</span>
+          </div>
+
+          <span className="security-dot" />
+        </div>
+
+        <button className="logout-button" onClick={logout}>
+          <LogOut size={18} />
+          <span>Sign out</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="app-layout">
+      {mobileOpen && (
+        <div
+          className="mobile-overlay"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      <aside className="desktop-sidebar">
+        <SidebarContent />
+      </aside>
+
+      <aside className={`mobile-sidebar ${mobileOpen ? "open" : ""}`}>
+        <button
+          className="mobile-close"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Close menu"
+        >
+          <X size={21} />
+        </button>
+
+        <SidebarContent />
+      </aside>
+
+      <main className="app-main">
+        {/* Notification poller and security verification handler */}
+        <SecurityVerificationListener />
+        <header className="topbar">
+          <div className="topbar-left">
+            <button
+              className="mobile-menu"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open menu"
+            >
+              <Menu size={22} />
+            </button>
+
+            <div className="topbar-heading">
+              <div className="topbar-label">READERS CIRCLE</div>
+              <div className="topbar-title">
+                T.B. Jayah Zahira College
+              </div>
+            </div>
+          </div>
+
+          <div className="topbar-right">
+            <button className="icon-button" title="Notifications">
+              <Bell size={19} />
+              <span className="notification-dot" />
+            </button>
+
+            <div className="user-mini">
+              <div className="user-avatar">
+                <CircleUserRound size={20} />
+              </div>
+
+              <div className="user-mini-text">
+                <strong>{isOwner ? "Administrator" : "Member"}</strong>
+                <span>{isOwner ? "Management" : "Account"}</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="page-content">{children}</div>
+      </main>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

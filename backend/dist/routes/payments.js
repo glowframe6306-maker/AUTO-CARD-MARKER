@@ -80,13 +80,110 @@ router.post("/", (0, authMiddleware_1.requirePermission)("manage_payments"), asy
     });
     return res.status(201).json({ payment, receipt, balance: { balanceWeeks, balanceMonths, balanceRupees } });
 });
+/*
+ * OWNER / ADMIN — USER-WISE PAYMENT HISTORY
+ *
+ * Returns ALL registered members, including members
+ * who do not have any payment records yet.
+ */
+router.get("/admin/history", (0, authMiddleware_1.requirePermission)("manage_payments"), async (req, res) => {
+    try {
+        const members = await prisma_1.default.memberProfile.findMany({
+            orderBy: {
+                id: "desc",
+            },
+            include: {
+                payments: {
+                    orderBy: {
+                        paymentDate: "desc",
+                    },
+                    include: {
+                        academicYear: true,
+                    },
+                },
+                user: {
+                    select: {
+                        id: true,
+                        accountId: true,
+                        email: true,
+                        fullName: true,
+                        status: true,
+                        isOwner: true,
+                    },
+                },
+            },
+        });
+        const result = members.map((member) => {
+            const payments = member.payments;
+            const totalPaid = payments.reduce((sum, payment) => sum + Number(payment.paymentAmount || 0), 0);
+            const completedPayments = payments.filter((payment) => payment.status === client_1.PaymentStatus.COMPLETED);
+            const pendingPayments = payments.filter((payment) => payment.status === client_1.PaymentStatus.PENDING);
+            const latestPayment = payments.length > 0 ? payments[0] : null;
+            return {
+                id: member.id,
+                memberId: member.memberId,
+                userId: member.userId,
+                fullName: member.fullName,
+                grade: member.grade,
+                position: member.position,
+                status: member.status,
+                user: member.user,
+                paymentCount: payments.length,
+                totalPaid,
+                completedCount: completedPayments.length,
+                pendingCount: pendingPayments.length,
+                latestPayment: latestPayment
+                    ? {
+                        id: latestPayment.id,
+                        month: latestPayment.month,
+                        academicYear: latestPayment.academicYear?.year ?? null,
+                        amount: latestPayment.paymentAmount,
+                        paymentDate: latestPayment.paymentDate,
+                        status: latestPayment.status,
+                        totalWeeks: latestPayment.totalWeeks,
+                    }
+                    : null,
+                payments,
+            };
+        });
+        return res.json({
+            members: result,
+            totalMembers: result.length,
+        });
+    }
+    catch (error) {
+        console.error("GET /api/payments/admin/history failed:", error);
+        return res.status(500).json({
+            error: "Unable to load user-wise payment history.",
+        });
+    }
+});
+router.get("/admin/all", authMiddleware_1.authenticate, async (req, res) => {
+    try {
+        const isOwner = req.user?.isOwner === true;
+        if (!isOwner)
+            return res.status(403).json({ error: "Forbidden" });
+        const payments = await prisma_1.default.payment.findMany({
+            include: {
+                member: { select: { id: true, memberId: true, fullName: true } },
+                academicYear: { select: { year: true, name: true } }
+            },
+            orderBy: { paymentDate: "desc" }
+        });
+        return res.json(payments);
+    }
+    catch (error) {
+        console.error("GET /payments/admin/all error:", error);
+        return res.status(500).json({ error: "Unable to load all payment records." });
+    }
+});
 router.get("/member/:memberId", authMiddleware_1.authenticate, async (req, res) => {
     const { memberId } = req.params;
     const member = await prisma_1.default.memberProfile.findUnique({ where: { memberId } });
     if (!member)
         return res.status(404).json({ error: "Member not found." });
-    const isAdmin = req.user?.isOwner || req.user?.roles.some((role) => ["SUPER_ADMIN", "ADMINISTRATOR", "ADMIN"].includes(role));
-    if (!isAdmin && member.userId !== req.user?.id) {
+    const isOwner = req.user?.isOwner === true;
+    if (!isOwner && member.userId !== req.user?.id) {
         return res.status(403).json({ error: "Forbidden" });
     }
     const payments = await prisma_1.default.payment.findMany({ where: { memberId: member.id }, orderBy: { paymentDate: "desc" } });
@@ -97,8 +194,8 @@ router.get("/member/:memberId/summary", authMiddleware_1.authenticate, async (re
     const member = await prisma_1.default.memberProfile.findUnique({ where: { memberId } });
     if (!member)
         return res.status(404).json({ error: "Member not found." });
-    const isAdmin = req.user?.isOwner || req.user?.roles.some((role) => ["SUPER_ADMIN", "ADMINISTRATOR", "ADMIN"].includes(role));
-    if (!isAdmin && member.userId !== req.user?.id) {
+    const isOwner = req.user?.isOwner === true;
+    if (!isOwner && member.userId !== req.user?.id) {
         return res.status(403).json({ error: "Forbidden" });
     }
     const payments = await prisma_1.default.payment.findMany({ where: { memberId: member.id } });
@@ -115,8 +212,8 @@ router.get("/member/:memberId/receipts", authMiddleware_1.authenticate, async (r
     const member = await prisma_1.default.memberProfile.findUnique({ where: { memberId } });
     if (!member)
         return res.status(404).json({ error: "Member not found." });
-    const isAdmin = req.user?.isOwner || req.user?.roles.some((role) => ["SUPER_ADMIN", "ADMINISTRATOR", "ADMIN"].includes(role));
-    if (!isAdmin && member.userId !== req.user?.id) {
+    const isOwner = req.user?.isOwner === true;
+    if (!isOwner && member.userId !== req.user?.id) {
         return res.status(403).json({ error: "Forbidden" });
     }
     const receipts = await prisma_1.default.receipt.findMany({ where: { memberId: member.id }, include: { issuedBy: true }, orderBy: { issuedAt: "desc" } });

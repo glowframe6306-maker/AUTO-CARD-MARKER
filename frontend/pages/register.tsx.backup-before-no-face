@@ -1,0 +1,353 @@
+﻿import { useEffect, useRef, useState } from "react";
+import { getApiUrl } from "../lib/api";
+
+const SECURITY_MESSAGE =
+  "SECURITY VERIFICATION IS REQUIRED. Registration cannot be completed without security verification.";
+
+export default function RegisterPage() {
+  const [name, setName] = useState("");
+  const [rcStudentId, setRcStudentId] = useState("");
+  const [email, setEmail] = useState("");
+  const [dob, setDob] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [capturing, setCapturing] = useState(false);
+  const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  async function startCamera() {
+    setError("");
+    setMessage("");
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError(SECURITY_MESSAGE);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "user",
+        },
+        audio: false,
+      });
+
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
+      }
+
+      setCapturing(true);
+    } catch {
+      setError(SECURITY_MESSAGE);
+      setCapturing(false);
+    }
+  }
+
+  function stopCamera() {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setCapturing(false);
+  }
+
+  function captureLivePhoto() {
+    const video = videoRef.current;
+
+    if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+      setError(SECURITY_MESSAGE);
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      setError(SECURITY_MESSAGE);
+      return;
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          setError(SECURITY_MESSAGE);
+          return;
+        }
+
+        if (previewUrl) {
+          URL.revokeObjectURL(previewUrl);
+        }
+
+        setCapturedBlob(blob);
+        setPreviewUrl(URL.createObjectURL(blob));
+        setError("");
+        stopCamera();
+      },
+      "image/jpeg",
+      0.9
+    );
+  }
+
+  function retakePhoto() {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
+    setPreviewUrl("");
+    setCapturedBlob(null);
+    setError("");
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    setError("");
+    setMessage("");
+
+    if (!name || !rcStudentId || !email || !dob || !password || !confirmPassword) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    if (!capturedBlob) {
+      setError(SECURITY_MESSAGE);
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("name", name.trim());
+      formData.append("rcStudentId", rcStudentId.trim());
+      formData.append("email", email.trim().toLowerCase());
+      formData.append("dob", dob);
+      formData.append("password", password);
+      formData.append("image", capturedBlob, "live-verification.jpg");
+
+      const response = await fetch(
+        `${getApiUrl()}/registrations`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const body = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setError(body?.error || "Registration failed.");
+        return;
+      }
+
+      setMessage("YOUR REGISTER DETAILS WAS SENT TO MANAGEMENT TEAM.");
+
+      setName("");
+      setRcStudentId("");
+      setEmail("");
+      setDob("");
+      setPassword("");
+      setConfirmPassword("");
+      retakePhoto();
+    } catch {
+      setError("Registration failed. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-950">
+      <div className="mx-auto max-w-2xl">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h1 className="text-2xl font-semibold">Register</h1>
+
+          <p className="mt-2 text-sm text-slate-600">
+            Complete your registration and security verification.
+          </p>
+
+          {error && (
+            <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {message && (
+            <div className="mt-5 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+              {message}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <label className="block">
+              <span className="text-sm font-medium">NAME</span>
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+                autoComplete="name"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">RC STUDENT ID</span>
+              <input
+                value={rcStudentId}
+                onChange={(event) => setRcStudentId(event.target.value)}
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">EMAIL ADDRESS</span>
+              <input
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                type="email"
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+                autoComplete="email"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">DATE OF BIRTH</span>
+              <input
+                value={dob}
+                onChange={(event) => setDob(event.target.value)}
+                type="date"
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">PASSWORD</span>
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type="password"
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+                autoComplete="new-password"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">CONFIRM PASSWORD</span>
+              <input
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                type="password"
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+                autoComplete="new-password"
+              />
+            </label>
+
+            <div className="rounded-3xl border border-slate-200 p-4">
+              <p className="text-sm font-semibold">LIVE SECURITY VERIFICATION</p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                A live photo from your front camera is required. Existing photos
+                cannot be uploaded.
+              </p>
+
+              {!capturing && !capturedBlob && (
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="mt-4 rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white"
+                >
+                  START FRONT CAMERA
+                </button>
+              )}
+
+              {capturing && (
+                <div className="mt-4">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="w-full rounded-2xl border border-slate-200"
+                  />
+
+                  <div className="mt-3 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={captureLivePhoto}
+                      className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white"
+                    >
+                      CAPTURE LIVE PHOTO
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={stopCamera}
+                      className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold"
+                    >
+                      CANCEL
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {capturedBlob && previewUrl && (
+                <div className="mt-4">
+                  <p className="text-sm font-medium">LIVE PHOTO CAPTURED</p>
+
+                  <img
+                    src={previewUrl}
+                    alt="Live verification"
+                    className="mt-2 w-full rounded-2xl border border-slate-200"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={retakePhoto}
+                    className="mt-3 rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold"
+                  >
+                    RETAKE
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitting ? "REGISTERING..." : "REGISTER"}
+            </button>
+          </form>
+        </div>
+      </div>
+    </main>
+  );
+}

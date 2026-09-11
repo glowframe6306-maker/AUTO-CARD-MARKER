@@ -1,0 +1,328 @@
+﻿import { useEffect, useState } from "react";
+import { User } from "lucide-react";
+import { fetcher, getApiUrl } from "../lib/api";
+import { useAuth } from "../lib/useAuth";
+
+export default function MemberDashboard() {
+  const { user, isLoading } = useAuth();
+
+  const [member, setMember] = useState<any>(null);
+  const [paymentsSummary, setPaymentsSummary] = useState<any>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isLoading || !user) return;
+
+    fetcher(`${getApiUrl()}/api/members/me`)
+      .then(setMember)
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Unable to load member profile.");
+      });
+
+    fetcher(`${getApiUrl()}/api/notifications`)
+      .then(setNotifications)
+      .catch(() => {});
+  }, [user, isLoading]);
+
+  useEffect(() => {
+    if (!member?.memberId) return;
+
+    fetcher(`${getApiUrl()}/api/payments/member/${member.memberId}/summary`)
+      .then(setPaymentsSummary)
+      .catch(() => {});
+  }, [member]);
+
+  useEffect(() => {
+    if (isLoading || !user) return;
+
+    /*
+     * ONLY the real Owner goes to the Owner Dashboard.
+     * Every other authenticated account remains on Member Dashboard.
+     */
+    if (user.isOwner === true) {
+      window.location.href = "/dashboard";
+    }
+  }, [user, isLoading]);
+
+  if (isLoading) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-slate-50">
+        <p className="text-slate-600">Checking authentication...</p>
+      </main>
+    );
+  }
+
+  if (!user) {
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    }
+
+    return null;
+  }
+
+  if (user.isOwner === true) {
+    return null;
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-950">
+      <div className="mx-auto max-w-4xl space-y-6">
+
+        <header className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl flex items-center justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-brand-600">
+              Member Dashboard
+            </p>
+
+            <h1 className="mt-2 text-2xl font-semibold text-slate-950">
+              Welcome{user.fullName ? `, ${user.fullName}` : ""}
+            </h1>
+
+            <p className="mt-1 text-sm text-slate-600">
+              Account ID: {user.accountId ?? "--"} — Status: {user.status ?? "--"}
+            </p>
+          </div>
+        </header>
+
+        {/* Member Information presentation-only card (uses existing user/member state only) */}
+        <section className="member-info-card mt-6">
+          <div className="flex items-start justify-between mb-4">
+            <h2 className="text-sm font-semibold text-white flex items-center">
+              <User className="mr-3" size={18} />
+              Member Information
+            </h2>
+            <div>
+              {/* Status badge */}
+              {user.status ? (
+                <span
+                  className={`status-badge ${
+                    user.status === "ACTIVE"
+                      ? "status-active"
+                      : user.status === "INACTIVE"
+                      ? "status-inactive"
+                      : user.status === "PENDING"
+                      ? "status-pending"
+                      : "status-pending"
+                  }`}
+                >
+                  {user.status}
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="member-info-grid">
+            <div className="member-field">
+              <div className="member-label">RC No</div>
+              <div className="member-value rc">{member?.memberId ?? user.memberProfile?.memberId ?? "--"}</div>
+            </div>
+
+            <div className="member-field">
+              <div className="member-label">Full Name</div>
+              <div className="member-value name">{member?.fullName ?? user.fullName ?? "--"}</div>
+            </div>
+
+            <div className="member-field">
+              <div className="member-label">Account ID</div>
+              <div className="member-value account">{user.accountId ?? "--"}</div>
+            </div>
+
+            <div className="member-field">
+              <div className="member-label">Role</div>
+              <div className="member-value">{user.roles?.map((r: any) => r.role?.name).join(", ") || user.role || user.roleName || "--"}</div>
+            </div>
+
+            <div className="member-field">
+              <div className="member-label">Status</div>
+              <div className="member-value">{user.status ?? "--"}</div>
+            </div>
+
+            <div className="member-field">
+              <div className="member-label">Member Since</div>
+              <div className="member-value">{member?.createdAt ? new Date(member.createdAt).toLocaleDateString() : (user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "--")}</div>
+            </div>
+          </div>
+        </section>
+
+        {error && (
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <section className="grid gap-6 md:grid-cols-2">
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Overview
+            </h2>
+
+            <div className="mt-4 space-y-2 text-sm text-slate-700">
+              <p>
+                <strong>Name:</strong>{" "}
+                {member?.fullName ?? user.fullName ?? "--"}
+              </p>
+
+              <p>
+                <strong>Account ID:</strong>{" "}
+                {user.accountId ?? "--"}
+              </p>
+
+              <p>
+                <strong>RC Student ID:</strong>{" "}
+                {member?.memberId ?? user.memberProfile?.memberId ?? "--"}
+              </p>
+
+              <p>
+                <strong>Account status:</strong>{" "}
+                {user.status ?? "--"}
+              </p>
+
+              <p>
+                <strong>Current balance:</strong>{" "}
+                Rs.{" "}
+                {paymentsSummary?.balanceRupees ??
+                  paymentsSummary?.balance?.balanceRupees ??
+                  "--"}
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">
+              My Profile
+            </h2>
+
+            <div className="mt-4 space-y-2 text-sm text-slate-700">
+              <p>
+                <strong>Name:</strong>{" "}
+                {member?.fullName ?? user.fullName ?? "--"}
+              </p>
+
+              <p>
+                <strong>RC Student ID:</strong>{" "}
+                {member?.memberId ?? "--"}
+              </p>
+
+              <p>
+                <strong>Email:</strong>{" "}
+                {user.email ?? "--"}
+              </p>
+
+              <p>
+                <strong>Date of Birth:</strong>{" "}
+                {member?.dob
+                  ? new Date(member.dob).toLocaleDateString()
+                  : "--"}
+              </p>
+            </div>
+          </div>
+
+        </section>
+
+        <section className="grid gap-6 md:grid-cols-2">
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Monthly Payments
+            </h2>
+
+            <div className="mt-4 text-sm text-slate-700">
+              {paymentsSummary ? (
+                <div>
+                  <p>
+                    <strong>Total Paid:</strong>{" "}
+                    Rs.{" "}
+                    {paymentsSummary.totalPaid ??
+                      paymentsSummary.balance?.totalPaid ??
+                      "--"}
+                  </p>
+
+                  <p>
+                    <strong>Paid weeks:</strong>{" "}
+                    {paymentsSummary.paidWeeks ??
+                      paymentsSummary.balance?.paidWeeks ??
+                      "--"}
+                  </p>
+
+                  <p className="mt-3 font-medium">
+                    Recent payments:
+                  </p>
+
+                  <ul className="mt-2 list-disc pl-5 space-y-2">
+                    {(paymentsSummary.payments || [])
+                      .slice(0, 5)
+                      .map((p: any) => (
+                        <li key={p.id}>
+                          {p.month} — Rs. {p.paymentAmount} —{" "}
+                          {p.paymentDate
+                            ? new Date(p.paymentDate).toLocaleDateString()
+                            : "--"}
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-600">
+                  Loading payments...
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Notifications
+            </h2>
+
+            <div className="mt-4 text-sm text-slate-700">
+              {notifications.length ? (
+                notifications.slice(0, 5).map((n: any) => (
+                  <div key={n.id} className="mb-3">
+                    <p className="font-medium">
+                      {n.title}
+                    </p>
+
+                    <p className="text-sm text-slate-600">
+                      {n.message}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-600">
+                  No recent notifications.
+                </p>
+              )}
+            </div>
+          </div>
+
+        </section>
+
+        <div className="flex flex-wrap gap-3">
+          <a
+            href="/profile"
+            className="inline-block rounded-2xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white"
+          >
+            View Profile
+          </a>
+
+          <a
+            href="/payments"
+            className="inline-block rounded-2xl border px-4 py-2 text-sm"
+          >
+            View Payments
+          </a>
+
+          <a
+            href="/notifications"
+            className="inline-block rounded-2xl border px-4 py-2 text-sm"
+          >
+            Notifications
+          </a>
+        </div>
+
+      </div>
+    </main>
+  );
+}

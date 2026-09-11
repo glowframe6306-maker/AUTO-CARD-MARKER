@@ -19,12 +19,15 @@ function authenticate(req, res, next) {
     const token = authHeader.split(" ")[1];
     try {
         const verified = jsonwebtoken_1.default.verify(token, secret);
+        const roles = Array.isArray(verified.roles) ? verified.roles : [];
+        const permissions = Array.isArray(verified.permissions) ? verified.permissions : [];
+        const isOwner = Boolean(verified.isOwner || roles.includes("OWNER"));
         req.user = {
             id: verified.id,
             accountId: verified.accountId,
-            roles: verified.roles || [],
-            permissions: verified.permissions || [],
-            isOwner: verified.isOwner || false,
+            roles,
+            permissions,
+            isOwner,
             deviceIdentifier: verified.deviceIdentifier,
         };
         return next();

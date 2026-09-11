@@ -1,0 +1,241 @@
+﻿import { useState } from "react";
+import { useRouter } from "next/router";
+
+export default function RegisterPage() {
+  const router = useRouter();
+
+  const [name, setName] = useState("");
+  const [rcStudentId, setRcStudentId] = useState("");
+  const [email, setEmail] = useState("");
+  const [dob, setDob] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [regLoading, setRegLoading] = useState(false);
+  const [regError, setRegError] = useState("");
+  const [regMessage, setRegMessage] = useState("");
+
+  async function handleRegister(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    setRegError("");
+    setRegMessage("");
+
+    if (
+      !name ||
+      !rcStudentId ||
+      !email ||
+      !dob ||
+      !regPassword ||
+      !confirmPassword
+    ) {
+      setRegError("Please fill all required fields.");
+      return;
+    }
+
+    if (regPassword !== confirmPassword) {
+      setRegError("Passwords do not match.");
+      return;
+    }
+
+    setRegLoading(true);
+
+    try {
+      const payload = {
+        name: name.trim(),
+        rcStudentId: rcStudentId.trim(),
+        email: email.trim().toLowerCase(),
+        dob,
+        password: regPassword,
+      };
+
+      const apiUrl =
+        process.env.NEXT_PUBLIC_API_URL ||
+        process.env.NEXT_PUBLIC_BACKEND_URL ||
+        "";
+
+      const url = `${apiUrl}/api/registrations`;
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const raw = await res.text();
+
+      let body: any = null;
+
+      try {
+        body = raw ? JSON.parse(raw) : null;
+      } catch {
+        body = null;
+      }
+
+      if (!res.ok) {
+        throw new Error(
+          body?.message ||
+          body?.error ||
+          raw ||
+          `Registration failed with HTTP ${res.status}`
+        );
+      }
+
+      if (!body?.success) {
+        throw new Error(
+          body?.message ||
+          body?.error ||
+          "Registration failed."
+        );
+      }
+
+      setRegMessage(
+        body?.message ||
+        "YOUR REGISTER DETAILS WAS SENT TO MANAGEMENT TEAM."
+      );
+
+      setName("");
+      setRcStudentId("");
+      setEmail("");
+      setDob("");
+      setRegPassword("");
+      setConfirmPassword("");
+
+    } catch (err) {
+      setRegError(
+        err instanceof Error
+          ? err.message
+          : "Registration failed."
+      );
+    } finally {
+      setRegLoading(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-6 py-12">
+      <div className="mx-auto flex min-h-[calc(100vh-6rem)] w-full max-w-md items-center justify-center">
+        <section className="w-full rounded-[32px] border border-slate-200 bg-white p-10 shadow-xl">
+
+          <div className="mb-8 space-y-3">
+            <p className="text-sm uppercase tracking-[0.24em] text-brand-600">
+              Secure Sign In
+            </p>
+
+            <h2 className="text-2xl font-semibold text-slate-950">
+              Register New Member
+            </h2>
+          </div>
+
+          <form className="space-y-5" onSubmit={handleRegister}>
+
+            <label className="block text-sm font-medium text-slate-700">
+              FULL NAME
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                type="text"
+                placeholder="Enter your full name"
+                className="mt-2 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-slate-700">
+              RC STUDENT ID
+              <input
+                value={rcStudentId}
+                onChange={(e) => setRcStudentId(e.target.value)}
+                type="text"
+                placeholder="Enter your RC Student ID"
+                className="mt-2 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-slate-700">
+              EMAIL ADDRESS
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                type="email"
+                placeholder="Enter your email address"
+                className="mt-2 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-slate-700">
+              DATE OF BIRTH
+              <input
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+                type="date"
+                className="mt-2 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-slate-700">
+              PASSWORD
+              <input
+                value={regPassword}
+                onChange={(e) => setRegPassword(e.target.value)}
+                type="password"
+                placeholder="Enter your password"
+                className="mt-2 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-slate-700">
+              CONFIRM PASSWORD
+              <input
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                type="password"
+                placeholder="Confirm your password"
+                className="mt-2 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+              />
+            </label>
+
+            {regError && (
+              <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
+                {regError}
+              </p>
+            )}
+
+            {regMessage && (
+              <p className="rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-700">
+                {regMessage}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={regLoading}
+              className="w-full rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              {regLoading ? "Registering..." : "REGISTER"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="w-full rounded-2xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              CANCEL
+            </button>
+
+          </form>
+
+          <button
+            type="button"
+            onClick={() => router.push("/")}
+            className="mt-5 text-sm font-medium text-brand-600 hover:underline"
+          >
+            Back to Sign In
+          </button>
+
+        </section>
+      </div>
+    </main>
+  );
+}

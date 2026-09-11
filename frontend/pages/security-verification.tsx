@@ -12,6 +12,8 @@ export default function SecurityVerification() {
   const [policy, setPolicy] = useState("AT_THIS_TIME");
   const [sessions, setSessions] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [roleSelections, setRoleSelections] = useState<Record<number, string>>({});
+  const [roleUpdatingId, setRoleUpdatingId] = useState<number | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<number | "">("");
   const [notes, setNotes] = useState("");
   const [selectedDuration, setSelectedDuration] = useState<number>(5);
@@ -102,6 +104,49 @@ export default function SecurityVerification() {
     () => sessions.find((item) => item.status === "REQUESTED" && (user?.isOwner ? item.userId === user?.id : item.userId === user?.id)),
     [sessions, user]
   );
+
+  async function approveUserRole(userId: number) {
+    const roleName = roleSelections[userId];
+
+    if (!roleName) {
+      setError("Please select a role.");
+      return;
+    }
+
+    setRoleUpdatingId(userId);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const response = await authFetch(`${getApiUrl()}/api/users/${userId}/role`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roleName }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to update user role.");
+      }
+
+      setUsers((current) =>
+        current.map((item) =>
+          item.id === userId ? data.user : item
+        )
+      );
+
+      setMessage(`User role successfully changed to ${roleName}.`);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to update user role."
+      );
+    } finally {
+      setRoleUpdatingId(null);
+    }
+  }
 
   async function savePolicy() {
     setError(null);
@@ -437,6 +482,7 @@ export default function SecurityVerification() {
     </div>
   );
 }
+
 
 
 
