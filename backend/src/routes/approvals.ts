@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import prisma from "../prisma";
 import { Prisma } from "@prisma/client";
 import { authenticate, requireAnyRole, AuthorizedRequest } from "../middleware/authMiddleware";
@@ -165,6 +165,18 @@ async function applyApproval(approval: any) {
           },
         });
 
+        await prisma.notification.create({
+          data: {
+            recipientId: existingAccount?.id ?? existingMemberProfile!.user.id,
+            type: "REGISTRATION_APPROVED",
+            title: "Registration Approved",
+            message: "Your registration has been approved successfully. You can now log in to your Member account.",
+            metadata: {
+              registrationId: pendingId,
+            },
+          },
+        });
+
         console.log(`Registration ${pendingId} already matched an active member account; marking as approved without duplication.`);
         break;
       }
@@ -216,6 +228,18 @@ async function applyApproval(approval: any) {
         });
 
         return createdUser;
+      });
+
+      await prisma.notification.create({
+        data: {
+          recipientId: result.id,
+          type: "REGISTRATION_APPROVED",
+          title: "Registration Approved",
+          message: "Your registration has been approved successfully. You can now log in to your Member account.",
+          metadata: {
+            registrationId: pendingId,
+          },
+        },
       });
 
       console.log(
@@ -309,3 +333,4 @@ router.post("/review/:requestId", requireAnyRole(["OWNER"]), async (req: Authori
 });
 
 export default router;
+

@@ -114,7 +114,25 @@ function convertMonth(value) {
 }
 // Owner: list pending requests for review
 router.get("/review", (0, authMiddleware_1.requireAnyRole)(["OWNER", "SUPER_ADMIN", "ADMINISTRATOR"]), async (req, res) => {
-    const rows = await prisma_1.default.paymentRequest.findMany({ where: { status: "PENDING_REVIEW" }, include: { cardUpload: true, ocrResult: true, member: true }, orderBy: { submittedAt: "desc" } });
+    const rows = await prisma_1.default.paymentRequest.findMany({
+        where: { status: "PENDING_REVIEW" },
+        include: {
+            cardUpload: true,
+            ocrResult: true,
+            member: {
+                include: {
+                    user: {
+                        select: {
+                            accountId: true,
+                            fullName: true,
+                            status: true,
+                        },
+                    },
+                },
+            },
+        },
+        orderBy: { submittedAt: "desc" },
+    });
     return res.json(rows);
 });
 // Owner: deny request

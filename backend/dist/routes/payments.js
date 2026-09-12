@@ -191,21 +191,52 @@ router.get("/member/:memberId", authMiddleware_1.authenticate, async (req, res) 
 });
 router.get("/member/:memberId/summary", authMiddleware_1.authenticate, async (req, res) => {
     const { memberId } = req.params;
-    const member = await prisma_1.default.memberProfile.findUnique({ where: { memberId } });
-    if (!member)
+    const member = await prisma_1.default.memberProfile.findUnique({
+        where: { memberId }
+    });
+    if (!member) {
         return res.status(404).json({ error: "Member not found." });
+    }
     const isOwner = req.user?.isOwner === true;
     if (!isOwner && member.userId !== req.user?.id) {
         return res.status(403).json({ error: "Forbidden" });
     }
-    const payments = await prisma_1.default.payment.findMany({ where: { memberId: member.id } });
-    const typedPayments = payments;
-    const totalPaid = typedPayments.reduce((sum, payment) => sum + payment.paymentAmount, 0);
-    const paidWeeks = typedPayments.reduce((sum, payment) => sum + payment.totalWeeks, 0);
-    const balanceWeeks = 4 - Math.min(4, paidWeeks % 4);
-    const balanceMonths = (0, payments_1.calculateBalanceMonths)(balanceWeeks);
-    const balanceRupees = (0, payments_1.calculateBalanceRupees)(balanceWeeks);
-    return res.json({ totalPaid, paidWeeks, balanceWeeks, balanceMonths, balanceRupees, payments });
+    const currentAcademicYear = await prisma_1.default.academicYear.findFirst({
+        where: { isCurrent: true }
+    });
+    const payments = await prisma_1.default.payment.findMany({
+        where: { memberId: member.id },
+        orderBy: { paymentDate: "desc" }
+    });
+    const completedPayments = payments.filter((payment) => payment.status === client_1.PaymentStatus.COMPLETED);
+    const totalPaid = completedPayments.reduce((sum, payment) => sum + Number(payment.paymentAmount || 0), 0);
+    const paidWeeks = completedPayments.reduce((sum, payment) => sum + Number(payment.totalWeeks || 0), 0);
+    let balanceMonths = 0;
+    if (currentAcademicYear) {
+        const openMonths = await prisma_1.default.monthlyRecord.findMany({
+            where: {
+                academicYearId: currentAcademicYear.id,
+                isClosed: false
+            },
+            orderBy: {
+                month: "asc"
+            }
+        });
+        const paidOpenMonths = new Set(completedPayments
+            .filter((payment) => payment.academicYearId === currentAcademicYear.id)
+            .map((payment) => Number(payment.month)));
+        balanceMonths = openMonths.filter((record) => !paidOpenMonths.has(Number(record.month))).length;
+    }
+    const balanceWeeks = balanceMonths * 4;
+    const balanceRupees = balanceMonths * 200;
+    return res.json({
+        totalPaid,
+        paidWeeks,
+        balanceWeeks,
+        balanceMonths: Number(balanceMonths),
+        balanceRupees,
+        payments
+    });
 });
 router.get("/member/:memberId/receipts", authMiddleware_1.authenticate, async (req, res) => {
     const { memberId } = req.params;

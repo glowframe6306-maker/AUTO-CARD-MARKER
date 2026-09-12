@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -77,6 +77,16 @@ router.post("/", upload.single("card"), async (req: AuthorizedRequest, res) => {
       },
     });
 
+    await prisma.notification.create({
+      data: {
+        recipientId: req.user.id,
+        type: "PAYMENT_PENDING",
+        title: "Payment Pending",
+        message: `Your payment request for ${monthName(requestedMonth)} month is pending review.`,
+        metadata: { requestId: request.id },
+      },
+    });
+
     return res.status(201).json({ request, cardUpload: cardUploadRecord, ocr: ocrRecord });
   } catch (err: any) {
     console.error(err);
@@ -116,7 +126,25 @@ function convertMonth(value: string) {
 
 // Owner: list pending requests for review
 router.get("/review", requireAnyRole(["OWNER", "SUPER_ADMIN", "ADMINISTRATOR"]), async (req: AuthorizedRequest, res) => {
-  const rows = await prisma.paymentRequest.findMany({ where: { status: "PENDING_REVIEW" }, include: { cardUpload: true, ocrResult: true, member: true }, orderBy: { submittedAt: "desc" } });
+  const rows = await prisma.paymentRequest.findMany({
+    where: { status: "PENDING_REVIEW" },
+    include: {
+      cardUpload: true,
+      ocrResult: true,
+      member: {
+        include: {
+          user: {
+            select: {
+              accountId: true,
+              fullName: true,
+              status: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: { submittedAt: "desc" },
+  });
   return res.json(rows);
 });
 
@@ -127,7 +155,7 @@ router.post("/:id/deny", requireAnyRole(["OWNER", "SUPER_ADMIN", "ADMINISTRATOR"
   const reqRec = await prisma.paymentRequest.findUnique({ where: { id: Number(id) }, include: { member: true } });
   if (!reqRec) return res.status(404).json({ error: "Request not found." });
   await prisma.paymentRequest.update({ where: { id: reqRec.id }, data: { status: "DENIED", reviewedById: req.user!.id, reviewedAt: new Date(), reviewerNotes: reason || null } });
-  await prisma.notification.create({ data: { recipientId: reqRec.member!.userId, type: "PAYMENT_FAILED", title: "Payment Failed", message: `Sorry, your payment failed for ${monthName(reqRec.requestedMonth)} month.`, metadata: { requestId: reqRec.id } } });
+  await prisma.notification.create({ data: { recipientId: reqRec.member!.userId, type: "PAYMENT_CANCELLED", title: "Payment Cancelled", message: `Your payment request for ${monthName(reqRec.requestedMonth)} month was cancelled.`, metadata: { requestId: reqRec.id } } });
   return res.json({ success: true });
 });
 
@@ -211,3 +239,5 @@ function monthName(m: number) {
 }
 
 export default router;
+
+

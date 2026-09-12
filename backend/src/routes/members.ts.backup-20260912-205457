@@ -1,35 +1,8 @@
 ﻿import { Router } from "express";
-import multer from "multer";
-import path from "path";
-import fs from "fs";
-import { authenticate, requireAnyRole, requirePermission, AuthorizedRequest } from "../middleware/authMiddleware";
 import prisma from "../prisma";
+import { authenticate, requireAnyRole, requirePermission, AuthorizedRequest } from "../middleware/authMiddleware";
+
 const router = Router();
-
-const profileUploadBase =
-  process.env.UPLOAD_BASE_PATH || path.resolve(__dirname, "../../../uploads/secure");
-
-fs.mkdirSync(profileUploadBase, { recursive: true });
-
-const profilePhotoUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => {
-      cb(null, profileUploadBase);
-    },
-    filename: (_req, file, cb) => {
-      const extension = path.extname(file.originalname).toLowerCase();
-      cb(null, `profile-${Date.now()}-${Math.random().toString(36).slice(2)}${extension}`);
-    },
-  }),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const accepted = ["image/jpeg", "image/png", "image/webp"];
-    if (!accepted.includes(file.mimetype)) {
-      return cb(new Error("Only JPG, PNG, and WEBP images are allowed."));
-    }
-    cb(null, true);
-  },
-});
 
 router.use(authenticate);
 
@@ -158,150 +131,6 @@ router.post("/", requirePermission("manage_members"), async (req: AuthorizedRequ
   return res.status(201).json({ message: "Member created.", userId: user.id });
 });
 
-/*
- * MEMBER SELF PROFILE
- * Members can edit ONLY:
- * - Full name
- * - Age
- * - Profile photo
- *
- * Email, RC number, position, and status remain read-only.
- */
-
-router.get("/me/profile", async (req: AuthorizedRequest, res) => {
-  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-
-  const member = await prisma.memberProfile.findFirst({
-    where: { userId: req.user.id },
-    include: {
-      user: {
-        select: {
-          email: true,
-          status: true,
-        },
-      },
-    },
-  });
-
-  if (!member) {
-    return res.status(404).json({ error: "Member profile not found." });
-  }
-
-  const customFields =
-    member.customFields &&
-    typeof member.customFields === "object" &&
-    !Array.isArray(member.customFields)
-      ? member.customFields as Record<string, unknown>
-      : {};
-
-  return res.json({
-    memberId: member.memberId,
-    fullName: member.fullName,
-    age: customFields.age ?? "",
-    email: member.user.email ?? "",
-    position: member.position,
-    status: member.user.status === "BLOCKED" ? "BLOCKED" : "ACTIVE",
-    photoUrl: member.photoUrl,
-  });
-});
-
-router.put("/me/profile", async (req: AuthorizedRequest, res) => {
-  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-
-  const member = await prisma.memberProfile.findFirst({
-    where: { userId: req.user.id },
-  });
-
-  if (!member) {
-    return res.status(404).json({ error: "Member profile not found." });
-  }
-
-  const { fullName, age } = req.body;
-
-  const updateData: any = {};
-
-  if (typeof fullName === "string" && fullName.trim()) {
-    updateData.fullName = fullName.trim();
-  }
-
-  const existingCustomFields =
-    member.customFields &&
-    typeof member.customFields === "object" &&
-    !Array.isArray(member.customFields)
-      ? member.customFields as Record<string, unknown>
-      : {};
-
-  if (age !== undefined) {
-    const ageNumber = Number(age);
-
-    if (!Number.isInteger(ageNumber) || ageNumber < 1 || ageNumber > 120) {
-      return res.status(400).json({ error: "Please enter a valid age." });
-    }
-
-    updateData.customFields = {
-      ...existingCustomFields,
-      age: ageNumber,
-    };
-  }
-
-  if (Object.keys(updateData).length === 0) {
-    return res.status(400).json({ error: "No editable profile information was provided." });
-  }
-
-  const updated = await prisma.$transaction(async (tx) => {
-    const result = await tx.memberProfile.update({
-      where: { id: member.id },
-      data: updateData,
-    });
-
-    if (typeof updateData.fullName === "string") {
-      await tx.user.update({
-        where: { id: member.userId },
-        data: { fullName: updateData.fullName },
-      });
-    }
-
-    return result;
-  });
-
-  return res.json({
-    message: "Profile updated successfully.",
-    member: updated,
-  });
-});
-
-router.post(
-  "/me/profile/photo",
-  profilePhotoUpload.single("photo"),
-  async (req: AuthorizedRequest, res) => {
-    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-
-    if (!req.file) {
-      return res.status(400).json({ error: "Please select a profile photo." });
-    }
-
-    const member = await prisma.memberProfile.findFirst({
-      where: { userId: req.user.id },
-    });
-
-    if (!member) {
-      fs.unlinkSync(req.file.path);
-      return res.status(404).json({ error: "Member profile not found." });
-    }
-
-    const photoUrl = `/uploads/secure/${req.file.filename}`;
-
-    const updated = await prisma.memberProfile.update({
-      where: { id: member.id },
-      data: { photoUrl },
-    });
-
-    return res.json({
-      message: "Profile photo updated successfully.",
-      photoUrl: updated.photoUrl,
-    });
-  }
-);
 router.put("/:memberId", requirePermission("manage_members"), async (req: AuthorizedRequest, res) => {
   const { memberId } = req.params;
   const { fullName, grade, position, status, email, customFields } = req.body;
@@ -652,13 +481,6 @@ router.delete("/:memberId", requirePermission("manage_members"), async (req: Aut
   });
 });
 export default router;
-
-
-
-
-
-
-
 
 
 

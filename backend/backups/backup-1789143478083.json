@@ -1,0 +1,713 @@
+{
+  "users": [
+    {
+      "id": 7,
+      "accountId": "2",
+      "email": "q@g.c",
+      "fullName": "EEEEEE",
+      "passwordHash": "$2b$12$LBIWs08RyhfbQ7.Cp4E.XuqtQFvZLxniLu04LCdAiF3Lug/gS2Nou",
+      "status": "ACTIVE",
+      "isOwner": false,
+      "forcePasswordReset": false,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": "2026-08-15T08:17:32.697Z",
+      "createdAt": "2026-08-15T08:12:05.521Z",
+      "updatedAt": "2026-08-17T03:47:02.372Z",
+      "verificationPolicy": "AT_THIS_TIME",
+      "svCompletionPopupDisabled": false,
+      "svRunningPopupDisabled": true,
+      "memberProfile": {
+        "id": 6,
+        "memberId": "2",
+        "userId": 7,
+        "fullName": "EEEEEE",
+        "grade": "",
+        "position": "",
+        "status": "ACTIVE",
+        "photoUrl": null,
+        "customFields": null,
+        "createdAt": "2026-08-15T09:21:00.724Z",
+        "updatedAt": "2026-08-15T09:21:00.724Z",
+        "archivedAt": null
+      },
+      "roles": []
+    },
+    {
+      "id": 6,
+      "accountId": "1",
+      "email": "hi@gmail.com",
+      "fullName": "GOBBAYA",
+      "passwordHash": "$2b$12$kOg81q3ypWyfPiHuOuQIiuM9bATKEGHah/LuzE6Op5lCsRX.4gi2e",
+      "status": "ACTIVE",
+      "isOwner": false,
+      "forcePasswordReset": false,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": "2026-08-17T06:44:39.614Z",
+      "createdAt": "2026-08-15T08:04:10.854Z",
+      "updatedAt": "2026-08-20T03:02:29.981Z",
+      "verificationPolicy": "AT_THIS_TIME",
+      "svCompletionPopupDisabled": false,
+      "svRunningPopupDisabled": false,
+      "memberProfile": {
+        "id": 5,
+        "memberId": "1",
+        "userId": 6,
+        "fullName": "GOBBAYA",
+        "grade": "",
+        "position": "",
+        "status": "ACTIVE",
+        "photoUrl": null,
+        "customFields": null,
+        "createdAt": "2026-08-15T09:21:00.719Z",
+        "updatedAt": "2026-08-17T05:05:37.616Z",
+        "archivedAt": null
+      },
+      "roles": [
+        {
+          "id": 11,
+          "userId": 6,
+          "roleId": 4,
+          "role": {
+            "id": 4,
+            "name": "ADMIN",
+            "label": "Admin"
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "accountId": "4",
+      "email": "mutta@gma.com",
+      "fullName": "imuhammadh1100@gmail.com",
+      "passwordHash": "$2b$12$Kee5JCjKnN7NC6OGuOm3B.8y16XIgUPoOVLyGTL/jYnq1rEdpdnzy",
+      "status": "ACTIVE",
+      "isOwner": false,
+      "forcePasswordReset": true,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": null,
+      "createdAt": "2026-08-17T03:13:43.027Z",
+      "updatedAt": "2026-08-17T05:08:37.940Z",
+      "verificationPolicy": "AT_THIS_TIME",
+      "svCompletionPopupDisabled": false,
+      "svRunningPopupDisabled": true,
+      "memberProfile": {
+        "id": 8,
+        "memberId": "4",
+        "userId": 9,
+        "fullName": "imuhammadh1100@gmail.com",
+        "grade": "",
+        "position": "MEMBER",
+        "status": "ACTIVE",
+        "photoUrl": null,
+        "customFields": {
+          "dob": "2009-03-23T00:00:00.000Z"
+        },
+        "createdAt": "2026-08-17T03:13:43.027Z",
+        "updatedAt": "2026-08-17T05:08:37.940Z",
+        "archivedAt": null
+      },
+      "roles": [
+        {
+          "id": 4,
+          "userId": 9,
+          "roleId": 5,
+          "role": {
+            "id": 5,
+            "name": "MEMBER",
+            "label": "Member"
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "accountId": "TESTRC1786795488.45446",
+      "email": "test1786795488.45446@example.com",
+      "fullName": "Test User",
+      "passwordHash": "$2b$12$lxtA5Y0ehEAraFj1eV2VouqwLYcPMycyThGuRR8N0UDNmtwJc11oi",
+      "status": "ACTIVE",
+      "isOwner": false,
+      "forcePasswordReset": false,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": null,
+      "createdAt": "2026-08-15T06:35:36.034Z",
+      "updatedAt": "2026-08-15T06:35:58.850Z",
+      "verificationPolicy": "AT_THIS_TIME",
+      "svCompletionPopupDisabled": false,
+      "svRunningPopupDisabled": false,
+      "memberProfile": {
+        "id": 2,
+        "memberId": "TESTRC1786795488.45446",
+        "userId": 3,
+        "fullName": "Test User",
+        "grade": "",
+        "position": "",
+        "status": "ACTIVE",
+        "photoUrl": null,
+        "customFields": null,
+        "createdAt": "2026-08-15T09:21:00.696Z",
+        "updatedAt": "2026-08-15T09:21:00.696Z",
+        "archivedAt": null
+      },
+      "roles": []
+    },
+    {
+      "id": 12,
+      "accountId": "E2E_RRC_1787068411448",
+      "email": "e2e_1787068411448@example.com",
+      "fullName": "E2E Approval Test",
+      "passwordHash": "$2b$12$X.9QUZR4Ezi1NWveh7/Xbeo1fz268SyZq.XlE9mouMT8eaYwZL/SO",
+      "status": "ACTIVE",
+      "isOwner": false,
+      "forcePasswordReset": true,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": null,
+      "createdAt": "2026-08-18T15:53:32.616Z",
+      "updatedAt": "2026-09-11T16:00:50.811Z",
+      "verificationPolicy": "AT_THIS_TIME",
+      "svCompletionPopupDisabled": false,
+      "svRunningPopupDisabled": false,
+      "memberProfile": {
+        "id": 11,
+        "memberId": "E2E_RRC_1787068411448",
+        "userId": 12,
+        "fullName": "E2E Approval Test",
+        "grade": "",
+        "position": "MEMBER",
+        "status": "ACTIVE",
+        "photoUrl": null,
+        "customFields": {
+          "dob": "2000-01-01T00:00:00.000Z"
+        },
+        "createdAt": "2026-08-18T15:53:32.616Z",
+        "updatedAt": "2026-09-11T16:00:50.811Z",
+        "archivedAt": null
+      },
+      "roles": [
+        {
+          "id": 14,
+          "userId": 12,
+          "roleId": 5,
+          "role": {
+            "id": 5,
+            "name": "MEMBER",
+            "label": "Member"
+          }
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "accountId": "owner",
+      "email": "glow@gmail.com",
+      "fullName": "System Owner",
+      "passwordHash": "$2b$12$BCtW/Cu0Y.5XdPhdOzMhTOBowgYwknNg4b5Ujj3bW/cmH5boOsGya",
+      "status": "ACTIVE",
+      "isOwner": true,
+      "forcePasswordReset": false,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": "2026-09-11T16:02:57.863Z",
+      "createdAt": "2026-08-12T13:57:52.963Z",
+      "updatedAt": "2026-09-11T16:17:08.024Z",
+      "verificationPolicy": "ALWAYS",
+      "svCompletionPopupDisabled": false,
+      "svRunningPopupDisabled": true,
+      "memberProfile": null,
+      "roles": [
+        {
+          "id": 1,
+          "userId": 1,
+          "roleId": 1,
+          "role": {
+            "id": 1,
+            "name": "OWNER",
+            "label": "Owner"
+          }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "accountId": "RC0001",
+      "email": "im@gmail.com",
+      "fullName": "Muhammadh",
+      "passwordHash": "$2b$12$GStBs7eMiiEQHO52p6Venu.EZKDTipnBf0GIPz4TgOr79HKeK27jq",
+      "status": "ACTIVE",
+      "isOwner": false,
+      "forcePasswordReset": true,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": null,
+      "createdAt": "2026-09-11T16:04:18.278Z",
+      "updatedAt": "2026-09-11T16:17:41.002Z",
+      "verificationPolicy": "AT_THIS_TIME",
+      "svCompletionPopupDisabled": false,
+      "svRunningPopupDisabled": false,
+      "memberProfile": {
+        "id": 12,
+        "memberId": "RC0001",
+        "userId": 13,
+        "fullName": "Muhammadh",
+        "grade": "",
+        "position": "MEMBER",
+        "status": "ACTIVE",
+        "photoUrl": null,
+        "customFields": {
+          "dob": "2002-12-12T00:00:00.000Z"
+        },
+        "createdAt": "2026-09-11T16:04:18.278Z",
+        "updatedAt": "2026-09-11T16:04:18.278Z",
+        "archivedAt": null
+      },
+      "roles": [
+        {
+          "id": 15,
+          "userId": 13,
+          "roleId": 5,
+          "role": {
+            "id": 5,
+            "name": "MEMBER",
+            "label": "Member"
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "accountId": "qss",
+      "email": "imuhammadh1100@gmail.com",
+      "fullName": "qq",
+      "passwordHash": "$2b$12$PIcmsmMZr1EQ7kKc0TUH4OHrKvQMbSP78Zb0pCx11HosNtE8u0SuG",
+      "status": "ACTIVE",
+      "isOwner": false,
+      "forcePasswordReset": false,
+      "failedLoginAttempts": 1,
+      "lockedUntil": null,
+      "lastFailedLoginAt": "2026-08-15T09:53:24.496Z",
+      "createdAt": "2026-08-15T07:47:04.499Z",
+      "updatedAt": "2026-08-15T09:53:24.497Z",
+      "verificationPolicy": "AT_THIS_TIME",
+      "svCompletionPopupDisabled": false,
+      "svRunningPopupDisabled": false,
+      "memberProfile": {
+        "id": 3,
+        "memberId": "qss",
+        "userId": 4,
+        "fullName": "qq",
+        "grade": "",
+        "position": "",
+        "status": "ACTIVE",
+        "photoUrl": null,
+        "customFields": null,
+        "createdAt": "2026-08-15T09:21:00.707Z",
+        "updatedAt": "2026-08-15T09:21:00.707Z",
+        "archivedAt": null
+      },
+      "roles": []
+    },
+    {
+      "id": 5,
+      "accountId": "MUTTA",
+      "email": "imu@gamil.com",
+      "fullName": "owner",
+      "passwordHash": "$2b$12$mD/gwYN1AbElGRLPJnP5bOQtwP.gtsnAu4ZbC6FiHdZ32DWcgJLy.",
+      "status": "ACTIVE",
+      "isOwner": false,
+      "forcePasswordReset": false,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": "2026-08-15T07:48:32.836Z",
+      "createdAt": "2026-08-15T07:48:17.331Z",
+      "updatedAt": "2026-08-17T03:10:21.673Z",
+      "verificationPolicy": "AT_THIS_TIME",
+      "svCompletionPopupDisabled": false,
+      "svRunningPopupDisabled": false,
+      "memberProfile": {
+        "id": 4,
+        "memberId": "MUTTA",
+        "userId": 5,
+        "fullName": "owner",
+        "grade": "",
+        "position": "",
+        "status": "ACTIVE",
+        "photoUrl": null,
+        "customFields": null,
+        "createdAt": "2026-08-15T09:21:00.714Z",
+        "updatedAt": "2026-08-15T09:21:00.714Z",
+        "archivedAt": null
+      },
+      "roles": []
+    },
+    {
+      "id": 8,
+      "accountId": "3",
+      "email": "imuhammadh100@gmail.com",
+      "fullName": "MUSTHAFA",
+      "passwordHash": "$2b$12$O6X5UfcKkMCjlW3bBzRnI.dKaigHekgA6J7bfu524vk84ABWwdjb6",
+      "status": "ACTIVE",
+      "isOwner": false,
+      "forcePasswordReset": true,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": null,
+      "createdAt": "2026-08-17T03:12:15.941Z",
+      "updatedAt": "2026-08-17T03:12:33.886Z",
+      "verificationPolicy": "AT_THIS_TIME",
+      "svCompletionPopupDisabled": false,
+      "svRunningPopupDisabled": false,
+      "memberProfile": {
+        "id": 7,
+        "memberId": "3",
+        "userId": 8,
+        "fullName": "MUSTHAFA",
+        "grade": "",
+        "position": "MEMBER",
+        "status": "ACTIVE",
+        "photoUrl": null,
+        "customFields": {
+          "dob": "2009-12-12T00:00:00.000Z"
+        },
+        "createdAt": "2026-08-17T03:12:15.941Z",
+        "updatedAt": "2026-08-17T03:12:15.941Z",
+        "archivedAt": null
+      },
+      "roles": [
+        {
+          "id": 3,
+          "userId": 8,
+          "roleId": 5,
+          "role": {
+            "id": 5,
+            "name": "MEMBER",
+            "label": "Member"
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "accountId": "member01",
+      "email": "member01@zahira.edu.lk",
+      "fullName": "Demo Member",
+      "passwordHash": "$2b$12$8Q8VJ35YYcVyczm8BUAELOVtCgQSYi9NXeN5SvkTJ82jxCQM5rhZm",
+      "status": "ACTIVE",
+      "isOwner": false,
+      "forcePasswordReset": true,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": "2026-08-18T15:53:33.956Z",
+      "createdAt": "2026-08-12T13:57:52.981Z",
+      "updatedAt": "2026-08-19T06:24:56.881Z",
+      "verificationPolicy": "AT_THIS_TIME",
+      "svCompletionPopupDisabled": false,
+      "svRunningPopupDisabled": false,
+      "memberProfile": {
+        "id": 1,
+        "memberId": "RC001",
+        "userId": 2,
+        "fullName": "Demo Member",
+        "grade": "Grade 10",
+        "position": "Reader",
+        "status": "ACTIVE",
+        "photoUrl": null,
+        "customFields": null,
+        "createdAt": "2026-08-12T13:57:52.981Z",
+        "updatedAt": "2026-08-12T13:57:52.981Z",
+        "archivedAt": null
+      },
+      "roles": [
+        {
+          "id": 10,
+          "userId": 2,
+          "roleId": 4,
+          "role": {
+            "id": 4,
+            "name": "ADMIN",
+            "label": "Admin"
+          }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "accountId": "E2E_RRC_1787068135342",
+      "email": "e2e_1787068135342@example.com",
+      "fullName": "E2E Approval Test",
+      "passwordHash": "$2b$12$UkxSCQxljAqxXtX6Sy6OR.9.HQeS2FBryk7BhjRekcnAkKw0firga",
+      "status": "ACTIVE",
+      "isOwner": false,
+      "forcePasswordReset": true,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": null,
+      "createdAt": "2026-08-18T15:48:57.070Z",
+      "updatedAt": "2026-08-18T15:48:57.070Z",
+      "verificationPolicy": "AT_THIS_TIME",
+      "svCompletionPopupDisabled": false,
+      "svRunningPopupDisabled": false,
+      "memberProfile": {
+        "id": 9,
+        "memberId": "E2E_RRC_1787068135342",
+        "userId": 10,
+        "fullName": "E2E Approval Test",
+        "grade": "",
+        "position": "MEMBER",
+        "status": "ACTIVE",
+        "photoUrl": null,
+        "customFields": {
+          "dob": "2000-01-01T00:00:00.000Z"
+        },
+        "createdAt": "2026-08-18T15:48:57.070Z",
+        "updatedAt": "2026-08-18T15:48:57.070Z",
+        "archivedAt": null
+      },
+      "roles": [
+        {
+          "id": 12,
+          "userId": 10,
+          "roleId": 5,
+          "role": {
+            "id": 5,
+            "name": "MEMBER",
+            "label": "Member"
+          }
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "accountId": "E2E_RRC_1787068296603",
+      "email": "e2e_1787068296603@example.com",
+      "fullName": "E2E Approval Test",
+      "passwordHash": "$2b$12$rFbGSrxKwnFgNGQwHwajWeMnreLfsRWb/r.ZCjTn2mFZCEtR6GS/G",
+      "status": "ACTIVE",
+      "isOwner": false,
+      "forcePasswordReset": true,
+      "failedLoginAttempts": 0,
+      "lockedUntil": null,
+      "lastFailedLoginAt": null,
+      "createdAt": "2026-08-18T15:51:37.780Z",
+      "updatedAt": "2026-08-18T15:51:38.294Z",
+      "verificationPolicy": "AT_THIS_TIME",
+      "svCompletionPopupDisabled": false,
+      "svRunningPopupDisabled": false,
+      "memberProfile": {
+        "id": 10,
+        "memberId": "E2E_RRC_1787068296603",
+        "userId": 11,
+        "fullName": "E2E Approval Test",
+        "grade": "",
+        "position": "MEMBER",
+        "status": "ACTIVE",
+        "photoUrl": null,
+        "customFields": {
+          "dob": "2000-01-01T00:00:00.000Z"
+        },
+        "createdAt": "2026-08-18T15:51:37.780Z",
+        "updatedAt": "2026-08-18T15:51:37.780Z",
+        "archivedAt": null
+      },
+      "roles": [
+        {
+          "id": 13,
+          "userId": 11,
+          "roleId": 5,
+          "role": {
+            "id": 5,
+            "name": "MEMBER",
+            "label": "Member"
+          }
+        }
+      ]
+    }
+  ],
+  "members": [
+    {
+      "id": 1,
+      "memberId": "RC001",
+      "userId": 2,
+      "fullName": "Demo Member",
+      "grade": "Grade 10",
+      "position": "Reader",
+      "status": "ACTIVE",
+      "photoUrl": null,
+      "customFields": null,
+      "createdAt": "2026-08-12T13:57:52.981Z",
+      "updatedAt": "2026-08-12T13:57:52.981Z",
+      "archivedAt": null
+    },
+    {
+      "id": 2,
+      "memberId": "TESTRC1786795488.45446",
+      "userId": 3,
+      "fullName": "Test User",
+      "grade": "",
+      "position": "",
+      "status": "ACTIVE",
+      "photoUrl": null,
+      "customFields": null,
+      "createdAt": "2026-08-15T09:21:00.696Z",
+      "updatedAt": "2026-08-15T09:21:00.696Z",
+      "archivedAt": null
+    },
+    {
+      "id": 3,
+      "memberId": "qss",
+      "userId": 4,
+      "fullName": "qq",
+      "grade": "",
+      "position": "",
+      "status": "ACTIVE",
+      "photoUrl": null,
+      "customFields": null,
+      "createdAt": "2026-08-15T09:21:00.707Z",
+      "updatedAt": "2026-08-15T09:21:00.707Z",
+      "archivedAt": null
+    },
+    {
+      "id": 4,
+      "memberId": "MUTTA",
+      "userId": 5,
+      "fullName": "owner",
+      "grade": "",
+      "position": "",
+      "status": "ACTIVE",
+      "photoUrl": null,
+      "customFields": null,
+      "createdAt": "2026-08-15T09:21:00.714Z",
+      "updatedAt": "2026-08-15T09:21:00.714Z",
+      "archivedAt": null
+    },
+    {
+      "id": 6,
+      "memberId": "2",
+      "userId": 7,
+      "fullName": "EEEEEE",
+      "grade": "",
+      "position": "",
+      "status": "ACTIVE",
+      "photoUrl": null,
+      "customFields": null,
+      "createdAt": "2026-08-15T09:21:00.724Z",
+      "updatedAt": "2026-08-15T09:21:00.724Z",
+      "archivedAt": null
+    },
+    {
+      "id": 7,
+      "memberId": "3",
+      "userId": 8,
+      "fullName": "MUSTHAFA",
+      "grade": "",
+      "position": "MEMBER",
+      "status": "ACTIVE",
+      "photoUrl": null,
+      "customFields": {
+        "dob": "2009-12-12T00:00:00.000Z"
+      },
+      "createdAt": "2026-08-17T03:12:15.941Z",
+      "updatedAt": "2026-08-17T03:12:15.941Z",
+      "archivedAt": null
+    },
+    {
+      "id": 5,
+      "memberId": "1",
+      "userId": 6,
+      "fullName": "GOBBAYA",
+      "grade": "",
+      "position": "",
+      "status": "ACTIVE",
+      "photoUrl": null,
+      "customFields": null,
+      "createdAt": "2026-08-15T09:21:00.719Z",
+      "updatedAt": "2026-08-17T05:05:37.616Z",
+      "archivedAt": null
+    },
+    {
+      "id": 8,
+      "memberId": "4",
+      "userId": 9,
+      "fullName": "imuhammadh1100@gmail.com",
+      "grade": "",
+      "position": "MEMBER",
+      "status": "ACTIVE",
+      "photoUrl": null,
+      "customFields": {
+        "dob": "2009-03-23T00:00:00.000Z"
+      },
+      "createdAt": "2026-08-17T03:13:43.027Z",
+      "updatedAt": "2026-08-17T05:08:37.940Z",
+      "archivedAt": null
+    },
+    {
+      "id": 9,
+      "memberId": "E2E_RRC_1787068135342",
+      "userId": 10,
+      "fullName": "E2E Approval Test",
+      "grade": "",
+      "position": "MEMBER",
+      "status": "ACTIVE",
+      "photoUrl": null,
+      "customFields": {
+        "dob": "2000-01-01T00:00:00.000Z"
+      },
+      "createdAt": "2026-08-18T15:48:57.070Z",
+      "updatedAt": "2026-08-18T15:48:57.070Z",
+      "archivedAt": null
+    },
+    {
+      "id": 10,
+      "memberId": "E2E_RRC_1787068296603",
+      "userId": 11,
+      "fullName": "E2E Approval Test",
+      "grade": "",
+      "position": "MEMBER",
+      "status": "ACTIVE",
+      "photoUrl": null,
+      "customFields": {
+        "dob": "2000-01-01T00:00:00.000Z"
+      },
+      "createdAt": "2026-08-18T15:51:37.780Z",
+      "updatedAt": "2026-08-18T15:51:37.780Z",
+      "archivedAt": null
+    },
+    {
+      "id": 11,
+      "memberId": "E2E_RRC_1787068411448",
+      "userId": 12,
+      "fullName": "E2E Approval Test",
+      "grade": "",
+      "position": "MEMBER",
+      "status": "ACTIVE",
+      "photoUrl": null,
+      "customFields": {
+        "dob": "2000-01-01T00:00:00.000Z"
+      },
+      "createdAt": "2026-08-18T15:53:32.616Z",
+      "updatedAt": "2026-09-11T16:00:50.811Z",
+      "archivedAt": null
+    },
+    {
+      "id": 12,
+      "memberId": "RC0001",
+      "userId": 13,
+      "fullName": "Muhammadh",
+      "grade": "",
+      "position": "MEMBER",
+      "status": "ACTIVE",
+      "photoUrl": null,
+      "customFields": {
+        "dob": "2002-12-12T00:00:00.000Z"
+      },
+      "createdAt": "2026-09-11T16:04:18.278Z",
+      "updatedAt": "2026-09-11T16:04:18.278Z",
+      "archivedAt": null
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import prisma from "../prisma";
 import { authenticate, requireRole, AuthorizedRequest } from "../middleware/authMiddleware";
 import multer from "multer";
@@ -88,24 +88,6 @@ router.post("/request", requireRole("OWNER"), async (req: AuthorizedRequest, res
       targetDeviceIdentifier: device.deviceIdentifier || undefined,
     },
   });
-
-  await prisma.notification.create({
-    data: {
-      recipientId: targetUser.id,
-      type: "SECURITY_VERIFICATION_REQUESTED",
-      title: "NEEDS SECURITY VERIFICATION",
-      message: "NEEDS SECURITY VERIFICATION",
-      metadata: { sessionId: session.id, durationSeconds: session.durationSeconds, targetDeviceIdentifier: device.deviceIdentifier },
-    },
-  });
-
-  return res.status(201).json(session);
-});
-
-// Device permission status endpoints
-router.get("/device/status", async (req: AuthorizedRequest, res) => {
-  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-  const device = await prisma.device.findFirst({ where: { deviceIdentifier: req.user.deviceIdentifier } });
   if (!device) return res.status(404).json({ error: "Device not found." });
   return res.json({ svCameraPermission: device.svCameraPermission, svMicPermission: device.svMicPermission, svPermissionDeniedAt: device.svPermissionDeniedAt });
 });
@@ -124,7 +106,6 @@ router.post("/session/:sessionId/reject", async (req: AuthorizedRequest, res) =>
   const updated = await prisma.cameraVerificationSession.update({ where: { id: session.id }, data: { status: "REJECTED", completedAt: new Date() } });
   // notify owner/requester
   try {
-    await prisma.notification.create({ data: { recipientId: updated.requestedById, type: "SECURITY_VERIFICATION_DENIED", title: "Verification denied", message: `Verification request #${updated.id} was denied by user.`, metadata: { sessionId: updated.id } } });
   } catch (e) {
     // ignore notification errors
   }
@@ -138,7 +119,6 @@ router.post("/session/:sessionId/accept", async (req: AuthorizedRequest, res) =>
   const updated = await prisma.cameraVerificationSession.update({ where: { id: session.id }, data: { status: "IN_PROGRESS" } });
   // notify owner/requester that user accepted and recording will start
   try {
-    await prisma.notification.create({ data: { recipientId: updated.requestedById, type: "SECURITY_VERIFICATION_ACCEPTED", title: "Verification accepted", message: `User accepted verification request #${updated.id}. Recording will start.`, metadata: { sessionId: updated.id } } });
   } catch (e) {
     // ignore
   }
@@ -178,18 +158,7 @@ router.post("/capture/:sessionId", upload.single("recording"), async (req: Autho
     where: { id: session.id },
     data: { mediaPath: req.file.path, status: "COMPLETED", completedAt: new Date() },
   });
-
-  await prisma.notification.create({
-    data: {
-      recipientId: session.requestedById,
-      type: "SECURITY_VERIFICATION_COMPLETED",
-      title: "Security verification completed",
-      message: `Verification recording from ${session.user.fullName} is ready for review.`,
-      metadata: { sessionId: session.id },
-    },
-  });
-
-  return res.json({ message: "Verification recording uploaded.", session: updatedSession });
+return res.json({ message: "Verification recording uploaded.", session: updatedSession });
 });
 
 router.get("/download/:sessionId", async (req: AuthorizedRequest, res) => {
@@ -208,4 +177,6 @@ router.get("/download/:sessionId", async (req: AuthorizedRequest, res) => {
 });
 
 export default router;
+
+
 

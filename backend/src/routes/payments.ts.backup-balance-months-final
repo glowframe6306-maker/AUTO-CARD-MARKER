@@ -221,24 +221,14 @@ router.get("/member/:memberId", authenticate, async (req: AuthorizedRequest, res
 
 router.get("/member/:memberId/summary", authenticate, async (req: AuthorizedRequest, res) => {
   const { memberId } = req.params;
+  const member = await prisma.memberProfile.findUnique({ where: { memberId } });
 
-  const member = await prisma.memberProfile.findUnique({
-    where: { memberId }
-  });
-
-  if (!member) {
-    return res.status(404).json({ error: "Member not found." });
-  }
+  if (!member) return res.status(404).json({ error: "Member not found." });
 
   const isOwner = req.user?.isOwner === true;
-
   if (!isOwner && member.userId !== req.user?.id) {
     return res.status(403).json({ error: "Forbidden" });
   }
-
-  const currentAcademicYear = await prisma.academicYear.findFirst({
-    where: { isCurrent: true }
-  });
 
   const payments = await prisma.payment.findMany({
     where: { memberId: member.id },
@@ -259,41 +249,50 @@ router.get("/member/:memberId/summary", authenticate, async (req: AuthorizedRequ
     0
   );
 
-  let balanceMonths = 0;
+  const currentAcademicYear = await prisma.academicYear.findFirst({
+    where: { isCurrent: true }
+  });
+
+  let pendingMonths = 0;
 
   if (currentAcademicYear) {
-    const openMonths = await prisma.monthlyRecord.findMany({
-      where: {
-        academicYearId: currentAcademicYear.id,
-        isClosed: false
-      },
-      orderBy: {
-        month: "asc"
-      }
-    });
+    const startDate = new Date(currentAcademicYear.startDate);
+    const endDate = new Date(currentAcademicYear.endDate);
+    const today = new Date();
 
-    const paidOpenMonths = new Set(
+    const effectiveEnd = today < endDate ? today : endDate;
+    const paidMonths = new Set(
       completedPayments
-        .filter(
-          (payment) =>
-            payment.academicYearId === currentAcademicYear.id
-        )
+        .filter((payment) => payment.academicYearId === currentAcademicYear.id)
         .map((payment) => Number(payment.month))
     );
 
-    balanceMonths = openMonths.filter(
-      (record) => !paidOpenMonths.has(Number(record.month))
-    ).length;
+    const monthCursor = new Date(
+      startDate.getFullYear(),
+      startDate.getMonth(),
+      1
+    );
+
+    while (monthCursor <= effectiveEnd && monthCursor <= today) {
+      const monthNumber = monthCursor.getMonth() + 1;
+
+      if (!paidMonths.has(monthNumber)) {
+        pendingMonths++;
+      }
+
+      monthCursor.setMonth(monthCursor.getMonth() + 1);
+    }
   }
 
-  const balanceWeeks = balanceMonths * 4;
-  const balanceRupees = balanceMonths * 200;
+  const balanceMonths = pendingMonths;
+  const balanceWeeks = pendingMonths * 4;
+  const balanceRupees = pendingMonths * 200;
 
   return res.json({
     totalPaid,
     paidWeeks,
     balanceWeeks,
-    balanceMonths: Number(balanceMonths),
+    balanceMonths,
     balanceRupees,
     payments
   });
@@ -312,7 +311,6 @@ router.get("/member/:memberId/receipts", authenticate, async (req: AuthorizedReq
 });
 
 export default router;
-
 
 
 

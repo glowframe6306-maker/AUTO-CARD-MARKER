@@ -33,7 +33,7 @@ process.env.PATH = `${tesseractPath};${process.env.PATH || ""}`;
 
 const app = express();
 const port = Number(process.env.APP_PORT || 8000);
-const staticUploadPath = path.resolve(__dirname, "../../uploads");
+const staticUploadPath = path.resolve(__dirname, "../../uploads/secure");
 
 app.use(helmet());
 const corsOrigins = process.env.FRONTEND_URL?.split(",") || ["http://localhost:3000"];
@@ -91,7 +91,6 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 app.listen(port, () => {
   console.log(`Backend running at http://localhost:${port}`);
 });
-
 
 
 

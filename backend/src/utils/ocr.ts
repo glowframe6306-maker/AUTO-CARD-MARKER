@@ -1,8 +1,9 @@
-import fs from "fs";
+﻿import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 import nodeTesseract from "node-tesseract-ocr";
 import prisma from "../prisma";
+
 
 const OCR_OPTIONS = {
   lang: "eng",
@@ -60,3 +61,7 @@ export async function isDuplicatePayment(memberId: number, academicYearId: numbe
   const existing = await prisma.payment.findFirst({ where: { memberId, academicYearId, month } });
   return Boolean(existing);
 }
+
+
+
+

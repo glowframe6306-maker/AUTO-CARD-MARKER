@@ -35,7 +35,7 @@ export async function authFetch(
     headers,
   });
 
-  if (response.status === 401) {
+  if (response.status === 401 || response.status === 403) {
     clearAuthToken();
   }
 
@@ -63,4 +63,3 @@ export const fetcher = async (
 
   return response.json();
 };
-
