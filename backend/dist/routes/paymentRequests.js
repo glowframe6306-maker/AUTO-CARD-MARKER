@@ -76,6 +76,15 @@ router.post("/", upload.single("card"), async (req, res) => {
                 status: "PENDING_REVIEW",
             },
         });
+        await prisma_1.default.notification.create({
+            data: {
+                recipientId: req.user.id,
+                type: "PAYMENT_PENDING",
+                title: "Payment Pending",
+                message: `Your payment request for ${monthName(requestedMonth)} month is pending review.`,
+                metadata: { requestId: request.id },
+            },
+        });
         return res.status(201).json({ request, cardUpload: cardUploadRecord, ocr: ocrRecord });
     }
     catch (err) {
@@ -143,7 +152,7 @@ router.post("/:id/deny", (0, authMiddleware_1.requireAnyRole)(["OWNER", "SUPER_A
     if (!reqRec)
         return res.status(404).json({ error: "Request not found." });
     await prisma_1.default.paymentRequest.update({ where: { id: reqRec.id }, data: { status: "DENIED", reviewedById: req.user.id, reviewedAt: new Date(), reviewerNotes: reason || null } });
-    await prisma_1.default.notification.create({ data: { recipientId: reqRec.member.userId, type: "PAYMENT_FAILED", title: "Payment Failed", message: `Sorry, your payment failed for ${monthName(reqRec.requestedMonth)} month.`, metadata: { requestId: reqRec.id } } });
+    await prisma_1.default.notification.create({ data: { recipientId: reqRec.member.userId, type: "PAYMENT_CANCELLED", title: "Payment Cancelled", message: `Your payment request for ${monthName(reqRec.requestedMonth)} month was cancelled.`, metadata: { requestId: reqRec.id } } });
     return res.json({ success: true });
 });
 // Owner: allow request (moves to awaiting manual selection)

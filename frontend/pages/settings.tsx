@@ -13,6 +13,7 @@ type UserData = {
   fullName?: string; 
   email?: string; 
   isOwner?: boolean; 
+  roles?: string[];
 }; 
  
 type Theme = "system" | "light" | "dark"; 
@@ -75,10 +76,6 @@ export default function Settings() {
         setEmail(data?.email || ""); 
       }) 
       .catch((err) => setError(err.message)); 
- 
-    fetcher(`${getApiUrl()}/api/system/health`) 
-      .then(() => setStatus("API reachable")) 
-      .catch((err) => setStatus(`API unavailable: ${err.message}`)); 
  
     if (typeof window !== "undefined") { 
       applyGlobalLanguage(getStoredLanguage()); 
@@ -636,6 +633,7 @@ export default function Settings() {
         </div> 
       </section> 
  
+        {(user?.isOwner === true || user?.roles?.some((role) => ["OWNER", "SUPER_ADMIN", "ADMINISTRATOR"].includes(role))) && (
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"> 
  
         <h2 className="text-lg font-semibold text-slate-950"> 
@@ -682,8 +680,10 @@ export default function Settings() {
           Save Preferences 
         </button> 
  
-      </section> 
+      </section>
+        )} 
  
+        {(user?.isOwner === true || user?.roles?.some((role) => ["OWNER", "SUPER_ADMIN", "ADMINISTRATOR"].includes(role))) && (
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"> 
  
         <h2 className="text-lg font-semibold text-slate-950"> 
@@ -713,8 +713,10 @@ export default function Settings() {
           </button> 
  
         </div> 
-      </section> 
+      </section>
+        )} 
  
+        {(user?.isOwner === true || user?.roles?.some((role) => ["OWNER", "SUPER_ADMIN", "ADMINISTRATOR"].includes(role))) && (
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"> 
  
         <h2 className="text-lg font-semibold text-slate-950"> 
@@ -752,8 +754,10 @@ export default function Settings() {
           </div> 
  
         </div> 
-      </section> 
+      </section>
+        )} 
  
+        {(user?.isOwner === true || user?.roles?.some((role) => ["OWNER", "SUPER_ADMIN", "ADMINISTRATOR"].includes(role))) && (
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"> 
  
         <h2 className="text-lg font-semibold text-slate-950"> 
@@ -791,7 +795,8 @@ export default function Settings() {
           </div> 
  
         </div> 
-      </section> 
+      </section>
+        )} 
  
       {user?.isOwner && ( 
         <section className="rounded-3xl border border-brand-200 bg-brand-50 p-6 shadow-sm"> 
@@ -855,3 +860,6 @@ export default function Settings() {
     </div> 
   ); 
 } 
+
+
+

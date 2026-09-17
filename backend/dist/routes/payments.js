@@ -7,85 +7,25 @@ const express_1 = require("express");
 const prisma_1 = __importDefault(require("../prisma"));
 const client_1 = require("@prisma/client");
 const authMiddleware_1 = require("../middleware/authMiddleware");
-const payments_1 = require("../utils/payments");
 const router = (0, express_1.Router)();
-router.use(authMiddleware_1.authenticate);
-router.post("/", (0, authMiddleware_1.requirePermission)("manage_payments"), async (req, res) => {
-    const { memberId, academicYear, month, paymentAmount, paymentDate, notes } = req.body;
-    if (!memberId || !academicYear || month == null || paymentAmount == null || !paymentDate) {
-        return res.status(400).json({ error: "Missing required payment data." });
-    }
-    const member = await prisma_1.default.memberProfile.findUnique({ where: { memberId } });
-    if (!member)
-        return res.status(404).json({ error: "Member not found." });
-    const year = await prisma_1.default.academicYear.findUnique({ where: { year: Number(academicYear) } });
-    if (!year)
-        return res.status(404).json({ error: "Academic year not found." });
-    const paymentMonth = Number(month);
-    const amount = Number(paymentAmount);
-    const validAmounts = [50, 100, 150, 200];
-    if (!validAmounts.includes(amount)) {
-        return res.status(400).json({ error: "Payment amount must be one of Rs.50, Rs.100, Rs.150, Rs.200." });
-    }
-    const existingPayment = await prisma_1.default.payment.findFirst({ where: { memberId: member.id, academicYearId: year.id, month: paymentMonth } });
-    if (existingPayment) {
-        return res.status(409).json({ error: "A payment for this member, month and year already exists." });
-    }
-    const week1 = amount >= 50;
-    const week2 = amount >= 100;
-    const week3 = amount >= 150;
-    const week4 = amount >= 200;
-    const totalWeeks = [week1, week2, week3, week4].filter(Boolean).length;
-    const balanceWeeks = (0, payments_1.calculateBalanceWeeks)(week1, week2, week3, week4);
-    const balanceMonths = (0, payments_1.calculateBalanceMonths)(balanceWeeks);
-    const balanceRupees = (0, payments_1.calculateBalanceRupees)(balanceWeeks);
-    const paymentData = {
-        memberId: member.id,
-        academicYearId: year.id,
-        month: paymentMonth,
-        paymentAmount: amount,
-        paymentDate: new Date(paymentDate),
-        week1,
-        week2,
-        week3,
-        week4,
-        totalWeeks,
-        recordedById: req.user.id,
-        status: client_1.PaymentStatus.COMPLETED,
-        notes,
+function buildPaymentStatistics(payments, paymentRequests) {
+    const completed = payments.filter((payment) => payment.status === client_1.PaymentStatus.COMPLETED);
+    const failed = payments.filter((payment) => payment.status === client_1.PaymentStatus.FAILED);
+    const pendingRequests = paymentRequests.filter((request) => request.status === client_1.PaymentRequestStatus.PENDING_REVIEW ||
+        request.status === client_1.PaymentRequestStatus.AWAITING_MANUAL_SELECTION);
+    const deniedRequests = paymentRequests.filter((request) => request.status === client_1.PaymentRequestStatus.DENIED);
+    const paidMonthKeys = new Set(completed.map((payment) => `${payment.academicYearId}-${Number(payment.month)}`));
+    const paidMonths = paidMonthKeys.size;
+    const paidAmount = completed.reduce((sum, payment) => sum + Number(payment.paymentAmount || 0), 0);
+    const pendingMonths = pendingRequests.length;
+    return {
+        pendingMonths,
+        pendingAmount: pendingMonths * 200,
+        paidMonths,
+        paidAmount,
+        failedPayments: failed.length + deniedRequests.length,
     };
-    const payment = await prisma_1.default.payment.create({ data: paymentData });
-    const receiptNumber = `RC-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}-${String(Math.floor(Math.random() * 1000000)).padStart(6, "0")}`;
-    const receipt = await prisma_1.default.receipt.create({
-        data: {
-            paymentId: payment.id,
-            memberId: member.id,
-            issuedById: req.user.id,
-            amount: amount,
-            weeksPaid: totalWeeks,
-            month: paymentMonth,
-            receiptNumber,
-        },
-    });
-    await prisma_1.default.auditLog.create({
-        data: {
-            actorId: req.user.id,
-            actorRole: req.user.roles.join(","),
-            action: "CREATE_PAYMENT",
-            targetType: "PAYMENT",
-            targetId: `${payment.id}`,
-            status: "SUCCESS",
-            newValue: { paymentData, receiptNumber, balanceWeeks, balanceMonths, balanceRupees },
-        },
-    });
-    return res.status(201).json({ payment, receipt, balance: { balanceWeeks, balanceMonths, balanceRupees } });
-});
-/*
- * OWNER / ADMIN — USER-WISE PAYMENT HISTORY
- *
- * Returns ALL registered members, including members
- * who do not have any payment records yet.
- */
+}
 router.get("/admin/history", (0, authMiddleware_1.requirePermission)("manage_payments"), async (req, res) => {
     try {
         const members = await prisma_1.default.memberProfile.findMany({
@@ -175,6 +115,82 @@ router.get("/admin/all", authMiddleware_1.authenticate, async (req, res) => {
     catch (error) {
         console.error("GET /payments/admin/all error:", error);
         return res.status(500).json({ error: "Unable to load all payment records." });
+    }
+});
+router.get("/statistics", authMiddleware_1.authenticate, async (req, res) => {
+    try {
+        const isOwner = req.user?.isOwner === true;
+        let payments;
+        let paymentRequests;
+        if (isOwner) {
+            [payments, paymentRequests] = await Promise.all([
+                prisma_1.default.payment.findMany({
+                    orderBy: {
+                        paymentDate: "desc",
+                    },
+                }),
+                prisma_1.default.paymentRequest.findMany({
+                    orderBy: {
+                        submittedAt: "desc",
+                    },
+                }),
+            ]);
+        }
+        else {
+            const member = await prisma_1.default.memberProfile.findUnique({
+                where: { userId: req.user.id },
+            });
+            if (!member) {
+                return res.status(404).json({ error: "Member profile not found." });
+            }
+            [payments, paymentRequests] = await Promise.all([
+                prisma_1.default.payment.findMany({
+                    where: {
+                        memberId: member.id,
+                    },
+                    orderBy: {
+                        paymentDate: "desc",
+                    },
+                }),
+                prisma_1.default.paymentRequest.findMany({
+                    where: {
+                        memberId: member.id,
+                    },
+                    orderBy: {
+                        submittedAt: "desc",
+                    },
+                }),
+            ]);
+        }
+        const statistics = buildPaymentStatistics(payments.map((payment) => ({
+            status: payment.status,
+            paymentAmount: Number(payment.paymentAmount || 0),
+            memberId: payment.memberId,
+            academicYearId: payment.academicYearId,
+            month: Number(payment.month),
+        })), paymentRequests.map((request) => ({
+            status: request.status,
+            amount: Number(request.amount || 0),
+            memberId: request.memberId,
+        })));
+        console.log("PAYMENT STATISTICS:", {
+            userId: req.user?.id,
+            isOwner,
+            payments: payments.length,
+            completed: payments.filter((p) => p.status === client_1.PaymentStatus.COMPLETED).length,
+            pendingRequests: paymentRequests.filter((r) => r.status === client_1.PaymentRequestStatus.PENDING_REVIEW ||
+                r.status === client_1.PaymentRequestStatus.AWAITING_MANUAL_SELECTION).length,
+            deniedRequests: paymentRequests.filter((r) => r.status === client_1.PaymentRequestStatus.DENIED).length,
+            failedPayments: payments.filter((p) => p.status === client_1.PaymentStatus.FAILED).length,
+            statistics,
+        });
+        return res.json(statistics);
+    }
+    catch (error) {
+        console.error("GET /api/payments/statistics failed:", error);
+        return res.status(500).json({
+            error: "Unable to load payment statistics.",
+        });
     }
 });
 router.get("/member/:memberId", authMiddleware_1.authenticate, async (req, res) => {

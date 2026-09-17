@@ -27,6 +27,9 @@ export default function MemberDashboard() {
   const [member, setMember] = useState<any>(null);
   const [paymentsSummary, setPaymentsSummary] = useState<any>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [receipts, setReceipts] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showPaymentPopup, setShowPaymentPopup] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState("");
@@ -37,30 +40,106 @@ export default function MemberDashboard() {
   useEffect(() => {
     if (isLoading || !user) return;
 
-    fetcher(`${getApiUrl()}/api/members/me`)
-      .then(setMember)
-      .catch((err) => {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load member profile."
-        );
-      });
+    let mounted = true;
 
-    fetcher(`${getApiUrl()}/api/notifications`)
-      .then(setNotifications)
-      .catch(() => {});
+    const loadLiveMemberData = async () => {
+      try {
+        const memberData = await fetcher(
+          `${getApiUrl()}/api/members/me`
+        );
+
+        if (mounted) {
+          setMember(memberData);
+        }
+      } catch {
+        // Keep existing member data visible.
+      }
+
+      try {
+        const notificationData = await fetcher(
+          `${getApiUrl()}/api/notifications`
+        );
+
+        if (mounted) {
+          setNotifications(notificationData);
+        }
+      } catch {
+        // Keep existing notification data visible.
+      }
+
+      try {
+        const activityData = await fetcher(
+          `${getApiUrl()}/api/members/me/activity`
+        );
+
+        if (mounted) {
+          setRecentActivity(activityData);
+        }
+      } catch {
+        // Keep existing activity data visible.
+      }
+
+      try {
+        const announcementData = await fetcher(
+          `${getApiUrl()}/api/announcements`
+        );
+
+        if (mounted) {
+          setAnnouncements(announcementData);
+        }
+      } catch {
+        // Keep existing announcement data visible.
+      }
+    };
+
+    void loadLiveMemberData();
+
+    const interval = window.setInterval(() => {
+      void loadLiveMemberData();
+    }, 3000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
   }, [user, isLoading]);
 
   useEffect(() => {
     if (!member?.memberId) return;
 
-    fetcher(
-      `${getApiUrl()}/api/payments/member/${member.memberId}/summary`
-    )
-      .then(setPaymentsSummary)
-      .catch(() => {});
-  }, [member]);
+    let mounted = true;
+
+    const loadLivePaymentData = async () => {
+      try {
+        const [summaryData, receiptData] = await Promise.all([
+          fetcher(
+            `${getApiUrl()}/api/payments/member/${member.memberId}/summary`
+          ),
+          fetcher(
+            `${getApiUrl()}/api/payments/member/${member.memberId}/receipts`
+          ),
+        ]);
+
+        if (!mounted) return;
+
+        setPaymentsSummary(summaryData);
+        setReceipts(receiptData);
+      } catch {
+        // Keep the last successful dashboard data visible.
+      }
+    };
+
+    void loadLivePaymentData();
+
+    const interval = window.setInterval(() => {
+      void loadLivePaymentData();
+    }, 3000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, [member?.memberId]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -159,8 +238,30 @@ export default function MemberDashboard() {
 
   const profilePhotoUrl = getProfilePhotoUrl(member?.photoUrl ?? null);
   const accountStatus = user.status === "ACTIVE" ? "ACTIVE" : "BLOCKED";
-  const balanceMonths = Math.max(0, Math.trunc(Number(paymentsSummary?.balanceMonths ?? 0)));
+  const balanceMonths = Math.max(
+    0,
+    Math.trunc(Number(paymentsSummary?.balanceMonths ?? 0))
+  );
   const balanceAmount = balanceMonths * PAYMENT_AMOUNT;
+
+  const unreadNotifications = notifications.filter(
+    (notification: any) => notification.read !== true
+  ).length;
+
+  const latestAnnouncements = announcements.slice(0, 3);
+
+  const latestLogin = recentActivity.find(
+    (item: any) => item.action === "LOGIN"
+  );
+
+  const latestLogout = recentActivity.find(
+    (item: any) => item.action === "LOGOUT"
+  );
+
+  const reminderMessage =
+    balanceMonths > 0
+      ? `You have ${balanceMonths} unpaid month${balanceMonths === 1 ? "" : "s"}. Please complete your pending payment.`
+      : "All currently available months are paid.";
 
   function closePaymentPopup() {
     setShowPaymentPopup(false);
@@ -367,6 +468,183 @@ export default function MemberDashboard() {
           </div>
         </section>
 
+        <section className="grid gap-6 md:grid-cols-2">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                  ANNOUNCEMENTS
+                </p>
+                <h2 className="mt-2 text-xl font-semibold text-slate-900">
+                  Latest Announcements
+                </h2>
+              </div>
+
+              {latestAnnouncements.length > 0 && (
+                <span className="rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold text-brand-700">
+                  {latestAnnouncements.length}
+                </span>
+              )}
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {latestAnnouncements.length > 0 ? (
+                latestAnnouncements.map((announcement: any) => (
+                  <div
+                    key={announcement.id}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <p className="text-sm font-semibold text-slate-900">
+                      {announcement.title}
+                    </p>
+
+                    <p className="mt-2 text-sm text-slate-600">
+                      {announcement.content}
+                    </p>
+
+                    <p className="mt-2 text-xs text-slate-400">
+                      {announcement.createdAt
+                        ? new Date(announcement.createdAt).toLocaleString()
+                        : ""}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-600">
+                  No announcements at this time.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              NOTIFICATION STATUS
+            </p>
+
+            <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  Unread Notifications
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Notifications waiting to be read
+                </p>
+              </div>
+
+              <span className="rounded-full bg-brand-100 px-4 py-2 text-lg font-bold text-brand-700">
+                {unreadNotifications}
+              </span>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-900">
+                Payment Reminder
+              </p>
+
+              <p className="mt-1 text-sm text-slate-600">
+                {reminderMessage}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                RECEIPTS
+              </p>
+              <h2 className="mt-2 text-xl font-semibold text-slate-900">
+                Payment Receipts
+              </h2>
+            </div>
+
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+              {receipts.length}
+            </span>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {receipts.length > 0 ? (
+              receipts.slice(0, 5).map((receipt: any) => (
+                <div
+                  key={receipt.id}
+                  className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {receipt.receiptNumber}
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-600">
+                      {MONTH_NAMES[Number(receipt.month)] || "Month"}{" "}
+                      • LKR {Number(receipt.amount || 0).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.open(
+                        `${getApiUrl()}/api/receipts/${encodeURIComponent(
+                          receipt.receiptNumber
+                        )}/pdf`,
+                        "_blank",
+                        "noopener,noreferrer"
+                      );
+                    }}
+                    className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                  >
+                    Download Receipt
+                  </button>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-slate-600">
+                No payment receipts available.
+              </p>
+            )}
+          </div>
+        </section>
+
+        {/*
+         * Existing PAY FOR A MONTH section remains unchanged.
+         */}
+        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              RECENT ACTIVITY
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-slate-900">
+              Recent Activity
+            </h2>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                LAST LOGIN
+              </p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">
+                {latestLogin?.createdAt
+                  ? new Date(latestLogin.createdAt).toLocaleString()
+                  : "No login activity"}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                LAST LOGOUT
+              </p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">
+                {latestLogout?.createdAt
+                  ? new Date(latestLogout.createdAt).toLocaleString()
+                  : "No logout activity"}
+              </p>
+            </div>
+          </div>
+        </section>
         <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -523,6 +801,12 @@ export default function MemberDashboard() {
     </main>
   );
 }
+
+
+
+
+
+
 
 
 

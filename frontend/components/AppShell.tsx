@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { useRouter } from "next/router";
 
 import {
@@ -62,8 +62,8 @@ function SecurityVerificationListener() {
 
   function loadSecurityPermissionState() {
     try {
-      alwaysAllowRef.current = localStorage.getItem("securityVerificationAlwaysAllow") === "true";
-      neverAllowRef.current = localStorage.getItem("securityVerificationNeverAllow") === "true";
+      alwaysAllowRef.current = false;
+      neverAllowRef.current = false;
     } catch {
       alwaysAllowRef.current = false;
       neverAllowRef.current = false;
@@ -269,23 +269,41 @@ function SecurityVerificationListener() {
 
             if (!mounted) return;
 
-            // Per-user suppression and consent keys
-            const popupKey = getRequestPopupKey(session.user?.id ?? user?.id);
-            const consentKey = getRequestConsentKey(session.user?.id ?? user?.id);
-            const popupDisabled = (() => {
-              try { return localStorage.getItem(popupKey) === "true"; } catch { return false; }
-            })();
-            const consent = (() => {
-              try { return localStorage.getItem(consentKey); } catch { return null; }
-            })();
-
-            // ALWAYS ALLOW is independent of popup visibility.
-            // Future verification requests are automatically accepted.
+            
+            // Only the device targeted by the Owner may process this request.
+            // Other devices logged into the same account must ignore it.
             if (
-              consent === "always" ||
-              consent === "allow" ||
-              alwaysAllowRef.current === true
+              session.targetDeviceIdentifier &&
+              session.targetDeviceIdentifier !== user?.deviceIdentifier
             ) {
+              securityVerificationShownSessionsRef.current.delete(sessionId);
+              continue;
+            }
+
+            // Read the account-level verification preference.
+            // This is stored in the User record, not browser localStorage.
+            let accountVerificationPolicy: string | null = null;
+
+            try {
+              const policyResponse = await authFetch(
+                `${getApiUrl()}/api/verification/policy`
+              );
+
+              if (policyResponse.ok) {
+                const policyData = await policyResponse.json();
+                accountVerificationPolicy =
+                  policyData?.verificationPolicy || null;
+              }
+            } catch (policyError) {
+              console.error(
+                "Failed to load account verification policy",
+                policyError
+              );
+            }
+
+            // ALWAYS ALLOW:
+            // Automatically accept future requests for this account.
+            if (accountVerificationPolicy === "ALWAYS") {
               handledSessionsRef.current.add(sessionId);
 
               try {
@@ -327,31 +345,6 @@ function SecurityVerificationListener() {
 
               continue;
             }
-
-            // If popup is disabled and there is no ALWAYS ALLOW decision,
-            // do not display the custom request popup.
-            if (popupDisabled) {
-              if (consent === "deny" || neverAllowRef.current === true) {
-                handledSessionsRef.current.add(sessionId);
-
-                try {
-                  await authFetch(
-                    `${getApiUrl()}/api/verification/session/${sessionId}/reject`,
-                    { method: "POST" }
-                  );
-                  window.dispatchEvent(
-                    new Event("verification-session-updated")
-                  );
-                } catch (e) {
-                  console.error("Auto-reject failed", e);
-                }
-
-                continue;
-              }
-
-              continue;
-            }
-
             setModal({
               ...session,
               id: session.id,
@@ -652,8 +645,24 @@ function SecurityVerificationListener() {
     neverAllowRef.current = false;
 
     try {
-      localStorage.setItem("securityVerificationAlwaysAllow", "true");
-      localStorage.removeItem("securityVerificationNeverAllow");
+      // Persist ALWAYS ALLOW to the authenticated account through the backend.
+      // Browser storage is never the source of truth for this setting.
+      const policyResponse = await authFetch(
+        `${getApiUrl()}/api/verification/policy`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            verificationPolicy: "ALWAYS"
+          })
+        }
+      );
+
+      if (!policyResponse.ok) {
+        throw new Error("Could not save account verification preference.");
+      }
 
       /*
        * Remember the user's choice.
@@ -1008,9 +1017,7 @@ const pendingApprovalsCount = 0;
 const ownerNavigation = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Members", href: "/members", icon: Users },
-  { label: "Payments", href: "/payments", icon: CreditCard },
   { label: "OCR Review", href: "/ocr-review", icon: ScanLine },
-  { label: "Receipts", href: "/receipts", icon: Receipt },
   { label: "Reports", href: "/reports", icon: BarChart3 },
   { label: "Approvals", href: "/approvals", icon: CheckCircle2, count: pendingApprovalsCount },
   { label: "Months Management", href: "/months", icon: CalendarDays },
@@ -1021,8 +1028,7 @@ const ownerNavigation = [
 const memberNavigation = [
   { label: "Dashboard", href: "/member-dashboard", icon: LayoutDashboard },
   { label: "Profile", href: "/profile", icon: Users },
-  { label: "Payments", href: "/payments", icon: CreditCard },
-  { label: "Receipts", href: "/receipts", icon: Receipt },
+  { label: "Payment Tracker", href: "/payment-tracker", icon: CreditCard },
   { label: "Notifications", href: "/notifications", icon: Bell },
 ];
 
@@ -1125,15 +1131,97 @@ export default function AppShell({
   const isOwner = user?.isOwner === true;
   const navigation = isOwner ? ownerNavigation : memberNavigation;
 
+  useEffect(() => {
+    if (!user || user.isOwner === true || typeof window === "undefined") {
+      return;
+    }
+
+    const storedRequestId = localStorage.getItem("pendingLogoutRequestId");
+
+    if (!storedRequestId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const checkPendingLogout = async () => {
+      try {
+        const response = await authFetch(
+          `${getApiUrl()}/api/auth/logout-status?requestId=${encodeURIComponent(storedRequestId)}`
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json();
+
+        if (cancelled || data?.status !== "APPROVED") {
+          return;
+        }
+
+        const logoutResponse = await authFetch(`${getApiUrl()}/api/auth/logout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId: storedRequestId }),
+        });
+
+        if (!logoutResponse.ok) {
+          return;
+        }
+
+        localStorage.removeItem("pendingLogoutRequestId");
+        clearAuthToken();
+        window.location.href = "/";
+      } catch {
+        // Ignore polling errors; the user remains logged in until the owner approves.
+      }
+    };
+
+    void checkPendingLogout();
+
+    const interval = window.setInterval(checkPendingLogout, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [user]);
+
   if (router.pathname === "/") {
     return <>{children}</>;
   }
 
-  function logout() {
-    clearAuthToken();
-    window.location.href = "/";
+  async function logout() {
+    if (user?.isOwner === true) {
+      clearAuthToken();
+      window.location.href = "/";
+      return;
+    }
+
+    try {
+      const response = await authFetch(`${getApiUrl()}/api/auth/logout-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || "Unable to submit logout request.");
+      }
+
+      const data = await response.json();
+      localStorage.setItem("pendingLogoutRequestId", data.requestId);
+      alert("Logout request sent to Owner. You will remain logged in until the Owner approves it.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to submit logout request.";
+      alert(message);
+    }
   }
 
+  const [companionInstallOpen, setCompanionInstallOpen] = useState(false);
+  const [companionPlatform, setCompanionPlatform] = useState<"phone" | "desktop" | null>(null);
+  const [companionPhoneBrand, setCompanionPhoneBrand] = useState<string | null>(null);
   const SidebarContent = () => (
     <div className="sidebar-inner">
       <div className="brand-area">
@@ -1147,7 +1235,38 @@ export default function AppShell({
         </div>
       </div>
 
-      <div className="sidebar-scroll">
+            {isOwner && (
+        <button
+          type="button"
+          onClick={() => {
+            setCompanionInstallOpen(true);
+            setCompanionPlatform(null);
+            setCompanionPhoneBrand(null);
+          }}
+          className="mx-3 mb-3 w-[calc(100%-1.5rem)] rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-lg">
+              📱
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-bold text-slate-900">
+                INSTALL COMPANION APP
+              </div>
+
+              <div className="mt-0.5 text-xs text-slate-500">
+                Android APK & Windows App
+              </div>
+            </div>
+
+            <span className="text-lg font-bold text-slate-500">
+              ›
+            </span>
+          </div>
+        </button>
+      )}
+<div className="sidebar-scroll">
         <div className="sidebar-section-title">MAIN</div>
 
         <nav className="sidebar-nav">
@@ -1191,35 +1310,39 @@ export default function AppShell({
           })}
         </nav>
 
-        {/* SECURITY SIDEBAR ITEM START */}
-        <div className="sidebar-section-title administration-title">
-          SECURITY
-        </div>
+        {isOwner && (
+          <>
+            {/* SECURITY SIDEBAR ITEM START */}
+            <div className="sidebar-section-title administration-title">
+              SECURITY
+            </div>
 
-        <nav className="sidebar-nav">
-          <Link
-            href="/security-verification"
-            className={`sidebar-link ${router.pathname === "/security-verification" ? "active" : ""}`}
-            onClick={() => setMobileOpen(false)}
-          >
-            <span className="sidebar-link-icon">
-              <ShieldCheck size={18} strokeWidth={2} />
-            </span>
+            <nav className="sidebar-nav">
+              <Link
+                href="/security-verification"
+                className={`sidebar-link ${router.pathname === "/security-verification" ? "active" : ""}`}
+                onClick={() => setMobileOpen(false)}
+              >
+                <span className="sidebar-link-icon">
+                  <ShieldCheck size={18} strokeWidth={2} />
+                </span>
 
-            <span className="sidebar-link-label">
-              Security Verification
-            </span>
+                <span className="sidebar-link-label">
+                  Security Verification
+                </span>
 
-            {router.pathname === "/security-verification" && (
-              <ChevronRight
-                size={16}
-                className="active-arrow"
-                strokeWidth={2.4}
-              />
-            )}
-          </Link>
-        </nav>
-        {/* SECURITY SIDEBAR ITEM END */}
+                {router.pathname === "/security-verification" && (
+                  <ChevronRight
+                    size={16}
+                    className="active-arrow"
+                    strokeWidth={2.4}
+                  />
+                )}
+              </Link>
+            </nav>
+            {/* SECURITY SIDEBAR ITEM END */}
+          </>
+        )}
         {isOwner && (
           <>
             <div className="sidebar-section-title administration-title">
@@ -1269,6 +1392,235 @@ export default function AppShell({
           </>
         )}
       </div>
+      {/* COMPANION INSTALLER MODAL */}
+      {isOwner && companionInstallOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
+
+            <div className="mb-5 flex items-start justify-between">
+              <div>
+                <h2 className="text-lg font-black text-black">
+                  INSTALL COMPANION APP
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Choose your device type.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCompanionInstallOpen(false);
+                  setCompanionPlatform(null);
+                  setCompanionPhoneBrand(null);
+                }}
+                className="rounded-xl px-3 py-2 text-lg font-black text-black hover:bg-slate-100"
+                aria-label="Close installer"
+              >
+                ×
+              </button>
+            </div>
+
+            {!companionPlatform && (
+              <div className="grid grid-cols-2 gap-3">
+
+                <button
+                  type="button"
+                  onClick={() => setCompanionPlatform("phone")}
+                  className="rounded-2xl border border-slate-200 bg-white p-5 text-center text-black shadow-sm hover:bg-slate-50"
+                >
+                  <div className="text-3xl">📱</div>
+
+                  <div className="mt-2 font-black">
+                    PHONE
+                  </div>
+
+                  <div className="mt-1 text-xs text-slate-500">
+                    Android APK
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCompanionPlatform("desktop")}
+                  className="rounded-2xl border border-slate-200 bg-white p-5 text-center text-black shadow-sm hover:bg-slate-50"
+                >
+                  <div className="text-3xl">🖥️</div>
+
+                  <div className="mt-2 font-black">
+                    DESKTOP
+                  </div>
+
+                  <div className="mt-1 text-xs text-slate-500">
+                    Windows App
+                  </div>
+                </button>
+
+              </div>
+            )}
+
+            {companionPlatform === "phone" && !companionPhoneBrand && (
+              <div>
+
+                <button
+                  type="button"
+                  onClick={() => setCompanionPlatform(null)}
+                  className="mb-3 text-sm font-bold text-slate-600 hover:text-black"
+                >
+                  ← Back
+                </button>
+
+                <div className="mb-3 text-sm font-black text-black">
+                  SELECT PHONE BRAND
+                </div>
+
+                {/* IPHONE_IOS_OPTION_MARKER */}
+<div className="mt-2 rounded-xl border border-slate-300 bg-white p-3 text-black">
+  <div className="font-bold text-black">iPhone</div>
+  <div className="text-xs text-slate-500">iOS App</div>
+  <button
+    type="button"
+    disabled
+    className="mt-2 w-full rounded-lg bg-slate-200 px-4 py-2 font-bold text-slate-500"
+    title="The iOS build requires Apple signing and a macOS/Xcode build environment."
+  >
+    iOS APP — COMING SOON
+  </button>
+</div>
+<div className="grid grid-cols-2 gap-2">
+                  {[
+                    "Samsung",
+                    "Xiaomi",
+                    "Redmi",
+                    "OPPO",
+                    "vivo",
+                    "OnePlus",
+                    "Google Pixel",
+                    "Huawei",
+                    "Other Android",
+                  ].map((brand) => (
+                    <button
+                      key={brand}
+                      type="button"
+                      onClick={() => setCompanionPhoneBrand(brand)}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold text-black hover:bg-slate-50"
+                    >
+                      {brand}
+                    </button>
+                  ))}
+                </div>
+
+              </div>
+            )}
+
+            {companionPlatform === "phone" && companionPhoneBrand && (
+              <div>
+
+                <button
+                  type="button"
+                  onClick={() => setCompanionPhoneBrand(null)}
+                  className="mb-3 text-sm font-bold text-slate-600 hover:text-black"
+                >
+                  ← Back
+                </button>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+
+                  <div className="text-xs font-bold text-slate-500">
+                    SELECTED PHONE
+                  </div>
+
+                  <div className="mt-1 text-lg font-black text-black">
+                    {companionPhoneBrand}
+                  </div>
+
+                  <div className="mt-1 text-sm text-slate-600">
+                    AUTO-CARD-MARKING Android Companion
+                  </div>
+
+                  <a
+                    href="/downloads/AutoCardMarking-Android.apk"
+                    download
+                    className="mt-4 flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 font-black text-white hover:bg-slate-800"
+                  >
+                    DOWNLOAD APK
+                  </a>
+
+                </div>
+
+              </div>
+            )}
+
+            {companionPlatform === "desktop" && (
+              <div>
+
+                <button
+                  type="button"
+                  onClick={() => setCompanionPlatform(null)}
+                  className="mb-3 text-sm font-bold text-slate-600 hover:text-black"
+                >
+                  ← Back
+                </button>
+
+                <div className="mb-3 text-sm font-black text-black">
+                  SELECT DESKTOP PLATFORM
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs font-bold text-slate-500">
+                      WINDOWS
+                    </div>
+
+                    <div className="mt-1 text-lg font-black text-black">
+                      Windows PC
+                    </div>
+
+                    <div className="mt-1 text-sm text-slate-600">
+                      AUTO-CARD-MARKING Windows Companion
+                    </div>
+
+                    <a
+                      href="/api/downloads/windows"
+                      className="mt-4 flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 font-black text-white hover:bg-slate-800"
+                    >
+                      DOWNLOAD WINDOWS APP
+                    </a>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs font-bold text-slate-500">
+                      macOS
+                    </div>
+
+                    <div className="mt-1 text-lg font-black text-black">
+                      Mac
+                    </div>
+
+                    <div className="mt-1 text-sm text-slate-600">
+                      AUTO-CARD-MARKING macOS Companion
+                    </div>
+
+                    <a
+                      href="/downloads/AutoCardMarking-macOS.zip"
+                      download
+                      className="mt-4 flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 font-black text-white hover:bg-slate-800"
+                    >
+                      DOWNLOAD macOS APP
+                    </a>
+                  </div>
+
+                </div>
+
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
 
         <div className="sidebar-section-title">
           SETTINGS
@@ -1309,10 +1661,12 @@ export default function AppShell({
           <span className="security-dot" />
         </div>
 
-        <button className="logout-button" onClick={logout}>
-          <LogOut size={18} />
-          <span>Sign out</span>
-        </button>
+        {isOwner && (
+          <button className="logout-button" onClick={logout}>
+            <LogOut size={18} />
+            <span>Sign out</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1375,8 +1729,8 @@ export default function AppShell({
               </div>
 
               <div className="user-mini-text">
-                <strong>{isOwner ? "Administrator" : "Member"}</strong>
-                <span>{isOwner ? "Management" : "Account"}</span>
+                <strong>{router.pathname === "/dashboard" ? "Owner" : "Member"}</strong>
+                <span>{isOwner ? "Account" : "Account"}</span>
               </div>
             </div>
           </div>
@@ -1387,6 +1741,25 @@ export default function AppShell({
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -30,9 +30,11 @@ const verification_1 = __importDefault(require("./routes/verification"));
 const registrations_1 = __importDefault(require("./routes/registrations"));
 const months_1 = __importDefault(require("./routes/months"));
 dotenv_1.default.config();
+const tesseractPath = "C:\Program Files\Tesseract-OCR";
+process.env.PATH = `${tesseractPath};${process.env.PATH || ""}`;
 const app = (0, express_1.default)();
 const port = Number(process.env.APP_PORT || 8000);
-const staticUploadPath = path_1.default.join(__dirname, "../../uploads/secure");
+const staticUploadPath = path_1.default.resolve(__dirname, "../../uploads");
 app.use((0, helmet_1.default)());
 const corsOrigins = process.env.FRONTEND_URL?.split(",") || ["http://localhost:3000"];
 app.use((0, cors_1.default)({
@@ -78,6 +80,9 @@ app.use((err, req, res, next) => {
     console.error(err);
     res.status(err.status || 500).json({ error: "An unexpected error occurred." });
 });
-app.listen(port, () => {
-    console.log(`Backend running at http://localhost:${port}`);
-});
+if (process.env.VERCEL !== "1") {
+    app.listen(port, () => {
+        console.log(`Backend running at http://localhost:${port}`);
+    });
+}
+exports.default = app;

@@ -1,0 +1,156 @@
+﻿using System.Net.Http;
+using System.Net.Http.Json;
+using System.Text.Json;
+
+namespace AutoCardMarking.Companion;
+
+public partial class MainPage : ContentPage
+{
+    private const string ApiBaseUrl = "http://localhost:8000";
+
+    private readonly HttpClient _httpClient = new HttpClient();
+
+    public MainPage()
+    {
+        InitializeComponent();
+    }
+
+    private async void OnSignInClicked(object sender, EventArgs e)
+    {
+        var accountId = AccountIdEntry.Text?.Trim();
+        var password = PasswordEntry.Text ?? string.Empty;
+
+        StatusLabel.Text = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(accountId))
+        {
+            StatusLabel.Text = "Account ID is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            StatusLabel.Text = "Password is required.";
+            return;
+        }
+
+        SignInButton.IsEnabled = false;
+        LoadingIndicator.IsVisible = true;
+        LoadingIndicator.IsRunning = true;
+
+        try
+        {
+            var request = new
+            {
+                accountId,
+                password
+            };
+
+            using var response = await _httpClient.PostAsJsonAsync(
+                $"{ApiBaseUrl}/login",
+                request
+            );
+
+            var responseText = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                string message = "Sign in failed.";
+
+                try
+                {
+                    using var errorDocument = JsonDocument.Parse(responseText);
+
+                    if (errorDocument.RootElement.TryGetProperty("error", out var error))
+                    {
+                        message = error.GetString() ?? message;
+                    }
+                }
+                catch
+                {
+                    // Ignore invalid error responses.
+                }
+
+                StatusLabel.Text = message;
+                return;
+            }
+
+            using var document = JsonDocument.Parse(responseText);
+
+            if (!document.RootElement.TryGetProperty("token", out var tokenElement))
+            {
+                StatusLabel.Text = "Login response did not contain a token.";
+                return;
+            }
+
+            var token = tokenElement.GetString();
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                StatusLabel.Text = "Login token is empty.";
+                return;
+            }
+
+            await SecureStorage.SetAsync("authToken", token);
+
+            var isOwner = false;
+
+            if (document.RootElement.TryGetProperty("isOwner", out var ownerElement))
+            {
+                isOwner = ownerElement.GetBoolean();
+            }
+
+            var forcePasswordReset = false;
+
+            if (document.RootElement.TryGetProperty(
+                    "forcePasswordReset",
+                    out var resetElement))
+            {
+                forcePasswordReset = resetElement.GetBoolean();
+            }
+
+            StatusLabel.Text = "SIGN IN SUCCESSFUL.";
+
+            if (isOwner)
+            {
+                await DisplayAlert(
+                    "READERS CIRCLE",
+                    "Owner sign in successful.",
+                    "OK"
+                );
+            }
+            else
+            {
+                await DisplayAlert(
+                    "READERS CIRCLE",
+                    "Member sign in successful.",
+                    "OK"
+                );
+            }
+
+            if (forcePasswordReset)
+            {
+                await DisplayAlert(
+                    "Password Reset",
+                    "A password reset is required for this account.",
+                    "OK"
+                );
+            }
+        }
+        catch (HttpRequestException)
+        {
+            StatusLabel.Text =
+                "Unable to connect to the AUTO CARD MARKING backend.";
+        }
+        catch (Exception ex)
+        {
+            StatusLabel.Text = $"Sign in error: {ex.Message}";
+        }
+        finally
+        {
+            SignInButton.IsEnabled = true;
+            LoadingIndicator.IsVisible = false;
+            LoadingIndicator.IsRunning = false;
+        }
+    }
+}

@@ -1,0 +1,81 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="AutoCardMarking.Companion.MainPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    BackgroundColor="#FFFFFF">
+
+    <ScrollView>
+        <VerticalStackLayout
+            Padding="32"
+            Spacing="18"
+            VerticalOptions="Center"
+            MaximumWidthRequest="520">
+
+            <Label
+                Text="READERS CIRCLE"
+                FontSize="32"
+                FontAttributes="Bold"
+                TextColor="#111111"
+                HorizontalTextAlignment="Center" />
+
+            <Label
+                Text="AUTO MONTHLY CARD PAYMENT MARKING SYSTEM"
+                FontSize="14"
+                TextColor="#555555"
+                HorizontalTextAlignment="Center" />
+
+            <BoxView
+                HeightRequest="1"
+                Color="#DDDDDD"
+                Margin="0,8,0,8" />
+
+            <Label
+                Text="SIGN IN"
+                FontSize="24"
+                FontAttributes="Bold"
+                TextColor="#111111"
+                HorizontalTextAlignment="Center" />
+
+            <Entry
+                x:Name="AccountIdEntry"
+                Placeholder="Account ID"
+                FontSize="16"
+                HeightRequest="52"
+                ClearButtonVisibility="WhileEditing"
+                Keyboard="Text" />
+
+            <Entry
+                x:Name="PasswordEntry"
+                Placeholder="Password"
+                FontSize="16"
+                HeightRequest="52"
+                IsPassword="True"
+                ClearButtonVisibility="WhileEditing" />
+
+            <Button
+                x:Name="SignInButton"
+                Text="SIGN IN"
+                HeightRequest="52"
+                CornerRadius="8"
+                BackgroundColor="#111111"
+                TextColor="White"
+                FontAttributes="Bold"
+                Clicked="OnSignInClicked" />
+
+            <ActivityIndicator
+                x:Name="LoadingIndicator"
+                IsVisible="False"
+                IsRunning="False"
+                HorizontalOptions="Center" />
+
+            <Label
+                x:Name="StatusLabel"
+                Text=""
+                FontSize="14"
+                TextColor="#CC0000"
+                HorizontalTextAlignment="Center" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

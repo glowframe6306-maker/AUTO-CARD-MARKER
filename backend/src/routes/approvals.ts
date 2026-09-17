@@ -1,4 +1,5 @@
-﻿import { Router } from "express";
+﻿import { getSecondaryPasswordHash } from "../utils/secondaryPassword";
+import { Router } from "express";
 import prisma from "../prisma";
 import { Prisma } from "@prisma/client";
 import { authenticate, requireAnyRole, AuthorizedRequest } from "../middleware/authMiddleware";
@@ -100,6 +101,20 @@ async function applyApproval(approval: any) {
       });
       break;
 
+    case "LOGOUT": {
+      const userId = Number(targetId);
+
+      if (!Number.isInteger(userId) || userId <= 0) {
+        throw new Error("Invalid logout target user ID.");
+      }
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { status: "INACTIVE" },
+      });
+      break;
+    }
+
     case "REGISTRATION": {
       const pendingId = Number(targetId);
 
@@ -192,6 +207,7 @@ async function applyApproval(approval: any) {
             email: pending.email,
             fullName: pending.name,
             passwordHash: pending.passwordHash,
+            secondaryPasswordHash: await getSecondaryPasswordHash(),
             status: "ACTIVE",
             isOwner: false,
             forcePasswordReset: true,
@@ -333,4 +349,7 @@ router.post("/review/:requestId", requireAnyRole(["OWNER"]), async (req: Authori
 });
 
 export default router;
+
+
+
 

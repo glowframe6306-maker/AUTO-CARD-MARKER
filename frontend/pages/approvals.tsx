@@ -196,6 +196,7 @@ export default function Approvals() {
         <div className="space-y-4">
           {requests.map((request) => {
             const isRegistration = request.targetType === "REGISTRATION";
+            const isLogoutRequest = request.targetType === "LOGOUT";
             const registration = registrationDetails[String(request.targetId)];
             const registrationImage =
               registrationImages[String(request.targetId)];
@@ -288,6 +289,60 @@ export default function Approvals() {
                       </p>
                     </div>
                   )
+                ) : isLogoutRequest ? (
+                  <>
+                    <p className="text-base font-semibold text-slate-950">
+                      LOGOUT REQUEST
+                    </p>
+
+                    <div className="mt-4 space-y-2">
+                      <p className="text-sm text-slate-700">
+                        <span className="font-semibold">REQUESTER USER ID:</span>{" "}
+                        {request.requesterId ?? request.targetId}
+                      </p>
+
+                      <p className="text-sm text-slate-700">
+                        <span className="font-semibold">ACCOUNT ID:</span>{" "}
+                        {request.newValue?.accountId ?? "-"}
+                      </p>
+
+                      <p className="text-sm text-slate-700">
+                        <span className="font-semibold">FULL NAME:</span>{" "}
+                        {request.newValue?.fullName ?? "-"}
+                      </p>
+
+                      <p className="text-sm text-slate-700">
+                        <span className="font-semibold">REQUESTED AT:</span>{" "}
+                        {new Date(request.createdAt).toLocaleString()}
+                      </p>
+
+                      <p className="text-sm text-slate-700">
+                        <span className="font-semibold">STATUS:</span>{" "}
+                        {request.status}
+                      </p>
+
+                      <p className="text-sm text-slate-700">
+                        <span className="font-semibold">REASON:</span>{" "}
+                        {request.reason}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        onClick={() => review(request.requestId, true)}
+                        className="button"
+                      >
+                        Approve
+                      </button>
+
+                      <button
+                        onClick={() => review(request.requestId, false)}
+                        className="button secondary"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </>
                 ) : (
                   <>
                     <p className="text-base font-semibold text-slate-950">

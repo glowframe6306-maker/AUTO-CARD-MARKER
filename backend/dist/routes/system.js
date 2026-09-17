@@ -10,7 +10,7 @@ const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const router = (0, express_1.Router)();
 router.use(authMiddleware_1.authenticate);
-router.get("/health", (0, authMiddleware_1.requireAnyRole)(["OWNER", "SUPER_ADMIN"]), async (req, res) => {
+router.get("/health", async (req, res) => {
     const dbStatus = await prisma_1.default.$queryRaw `SELECT 1`;
     const ocrStatus = true;
     const storagePath = process.env.UPLOAD_BASE_PATH || path_1.default.join(__dirname, "../../uploads/secure");

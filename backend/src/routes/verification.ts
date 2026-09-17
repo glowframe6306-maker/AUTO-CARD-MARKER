@@ -13,6 +13,24 @@ fs.mkdirSync(uploadPath, { recursive: true });
 
 const upload = multer({ dest: uploadPath, limits: { fileSize: 40 * 1024 * 1024 } });
 
+async function getLatestActiveDeviceForUser(userId: number) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { latestDeviceIdentifier: true },
+  });
+
+  if (!user?.latestDeviceIdentifier) {
+    return null;
+  }
+
+  return prisma.device.findFirst({
+    where: {
+      userId,
+      deviceIdentifier: user.latestDeviceIdentifier,
+    },
+  });
+}
+
 router.get("/policy", async (req: AuthorizedRequest, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
   if (!user) return res.status(404).json({ error: "User not found." });
@@ -62,34 +80,148 @@ router.get("/session/:sessionId", async (req: AuthorizedRequest, res) => {
 
 router.post("/request", requireRole("OWNER"), async (req: AuthorizedRequest, res) => {
   const { userId, permissionChoice, notes, durationSeconds } = req.body;
-  if (!userId || !durationSeconds) {
+  const targetUserId = Number(userId);
+  const requestedDuration = Number(durationSeconds);
+
+  if (!targetUserId || !requestedDuration) {
     return res.status(400).json({ error: "Required fields missing. userId and durationSeconds required." });
   }
+
   const effectivePermissionChoice = permissionChoice || "AT_THIS_TIME";
 
-  const targetUser = await prisma.user.findUnique({ where: { id: Number(userId) } });
+  const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
   if (!targetUser) {
     return res.status(404).json({ error: "Target user not found." });
   }
 
-  // Find the most recently active device for this user
-  const device = await prisma.device.findFirst({ where: { userId: Number(userId) }, orderBy: { lastActive: "desc" } });
-  if (!device) {
-    return res.status(400).json({ error: "Target user has no active device session." });
+  const latestDevice = await getLatestActiveDeviceForUser(targetUserId);
+  if (!latestDevice?.deviceIdentifier) {
+    return res.status(409).json({
+      error: "This user has no active latest device for security verification.",
+    });
   }
 
   const session = await prisma.cameraVerificationSession.create({
     data: {
-      userId: Number(userId),
+      userId: targetUserId,
       requestedById: req.user!.id,
       permissionChoice: effectivePermissionChoice,
       notes,
-      durationSeconds: Number(durationSeconds),
-      targetDeviceIdentifier: device.deviceIdentifier || undefined,
+      durationSeconds: requestedDuration,
+      targetDeviceIdentifier: latestDevice.deviceIdentifier,
+    },
+    include: {
+      user: true,
+      requestedBy: true,
     },
   });
-  if (!device) return res.status(404).json({ error: "Device not found." });
-  return res.json({ svCameraPermission: device.svCameraPermission, svMicPermission: device.svMicPermission, svPermissionDeniedAt: device.svPermissionDeniedAt });
+
+  await prisma.notification.create({
+    data: {
+      recipientId: targetUserId,
+      type: "SECURITY_VERIFICATION_REQUESTED",
+      title: "Security Verification Requested",
+      message: `${req.user!.accountId || "Owner"} requested a security verification session for your account.`,
+      metadata: {
+        sessionId: session.id,
+        durationSeconds: session.durationSeconds ?? requestedDuration,
+      },
+    },
+  });
+
+  return res.json(session);
+});
+
+router.post("/self-request", async (req: AuthorizedRequest, res) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Unauthorized." });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+  });
+
+  if (!user) {
+    return res.status(404).json({ error: "User not found." });
+  }
+
+  const requestedDuration = Number(req.body?.durationSeconds ?? 60);
+  const safeDuration = Number.isFinite(requestedDuration) && requestedDuration > 0
+    ? Math.min(requestedDuration, 60)
+    : 60;
+
+  const existingSession = await prisma.cameraVerificationSession.findFirst({
+    where: {
+      userId: req.user.id,
+      status: {
+        in: ["REQUESTED", "IN_PROGRESS"],
+      },
+    },
+    orderBy: {
+      requestedAt: "desc",
+    },
+  });
+
+  if (existingSession) {
+    return res.json(existingSession);
+  }
+
+  const latestDevice = await getLatestActiveDeviceForUser(req.user.id);
+  if (!latestDevice?.deviceIdentifier) {
+    return res.status(409).json({
+      error: "This device is not the active latest device for security verification.",
+    });
+  }
+
+  const session = await prisma.cameraVerificationSession.create({
+    data: {
+      userId: req.user.id,
+      requestedById: req.user.id,
+      permissionChoice: user.verificationPolicy,
+      notes: "Login security verification",
+      durationSeconds: safeDuration,
+      targetDeviceIdentifier: latestDevice.deviceIdentifier,
+    },
+    include: {
+      user: true,
+      requestedBy: true,
+    },
+  });
+
+  await prisma.notification.create({
+    data: {
+      recipientId: req.user.id,
+      type: "SECURITY_VERIFICATION_REQUESTED",
+      title: "Security Verification Requested",
+      message: "Please confirm camera and microphone access to complete your secure login verification.",
+      metadata: {
+        sessionId: session.id,
+        durationSeconds: session.durationSeconds ?? safeDuration,
+      },
+    },
+  });
+
+  return res.json(session);
+});
+
+router.get("/device/status", async (req: AuthorizedRequest, res) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Unauthorized." });
+  }
+
+  const device = await prisma.device.findFirst({
+    where: { userId: req.user.id },
+    orderBy: { lastActive: "desc" },
+  });
+
+  return res.json({
+    deviceIdentifier: device?.deviceIdentifier ?? null,
+    svCameraPermission: device?.svCameraPermission ?? false,
+    svMicPermission: device?.svMicPermission ?? false,
+    svPermissionDeniedAt: device?.svPermissionDeniedAt ?? null,
+    svLastPermissionCheck: device?.svLastPermissionCheck ?? null,
+    trusted: device?.trusted ?? false,
+  });
 });
 
 router.post("/device/permission", async (req: AuthorizedRequest, res) => {
@@ -113,18 +245,66 @@ router.post("/session/:sessionId/reject", async (req: AuthorizedRequest, res) =>
 });
 
 router.post("/session/:sessionId/accept", async (req: AuthorizedRequest, res) => {
-  const session = await prisma.cameraVerificationSession.findUnique({ where: { id: Number(req.params.sessionId) } });
-  if (!session) return res.status(404).json({ error: "Verification session not found." });
-  if (session.userId !== req.user!.id) return res.status(403).json({ error: "Forbidden." });
-  const updated = await prisma.cameraVerificationSession.update({ where: { id: session.id }, data: { status: "IN_PROGRESS" } });
+  const session = await prisma.cameraVerificationSession.findUnique({
+    where: { id: Number(req.params.sessionId) }
+  });
+
+  if (!session) {
+    return res.status(404).json({
+      error: "Verification session not found."
+    });
+  }
+
+  if (session.userId !== req.user!.id) {
+    return res.status(403).json({
+      error: "Forbidden."
+    });
+  }
+
+  if (session.targetDeviceIdentifier && req.user!.deviceIdentifier !== session.targetDeviceIdentifier) {
+    return res.status(403).json({
+      error: "This Security Verification request is assigned to another active device."
+    });
+  }
+
+  const rememberAlways = req.body?.rememberAlways === true;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const updatedSession = await tx.cameraVerificationSession.update({
+      where: { id: session.id },
+      data: {
+        status: "IN_PROGRESS"
+      }
+    });
+
+    /*
+     * ALWAYS ALLOW is stored on the TARGET USER account.
+     * session.userId is the member who received the request.
+     */
+    if (rememberAlways) {
+      await tx.user.update({
+        where: { id: session.userId },
+        data: {
+          verificationPolicy: "ALWAYS"
+        }
+      });
+    }
+
+    return updatedSession;
+  });
+
   // notify owner/requester that user accepted and recording will start
   try {
-  } catch (e) {
+  } catch {
     // ignore
   }
-  return res.json({ message: "Verification accepted." });
-});
 
+  return res.json({
+    message: "Verification accepted.",
+    verificationPolicy: rememberAlways ? "ALWAYS" : session.permissionChoice,
+    session: updated
+  });
+});
 router.get("/preferences", async (req: AuthorizedRequest, res) => {
   if (!req.user) return res.status(401).json({ error: "Unauthorized" });
   const user = await prisma.user.findUnique({ where: { id: req.user.id } });
@@ -148,9 +328,12 @@ router.post("/capture/:sessionId", upload.single("recording"), async (req: Autho
   if (session.userId !== req.user!.id) {
     return res.status(403).json({ error: "Forbidden." });
   }
+  if (!req.user?.deviceIdentifier) {
+    return res.status(403).json({ error: "This Security Verification request is assigned to another active device." });
+  }
   // Ensure the upload is coming from the intended device
-  if (session.targetDeviceIdentifier && req.user!.deviceIdentifier !== session.targetDeviceIdentifier) {
-    return res.status(403).json({ error: "This upload is not allowed from this device." });
+  if (session.targetDeviceIdentifier && req.user.deviceIdentifier !== session.targetDeviceIdentifier) {
+    return res.status(403).json({ error: "This Security Verification request is assigned to another active device." });
   }
   if (!req.file) return res.status(400).json({ error: "Recording file is required." });
 
@@ -166,17 +349,43 @@ router.get("/download/:sessionId", async (req: AuthorizedRequest, res) => {
     where: { id: Number(req.params.sessionId) },
     include: { user: true },
   });
-  if (!session) return res.status(404).json({ error: "Verification session not found." });
-  if (!req.user!.isOwner && session.userId !== req.user!.id) {
-    return res.status(403).json({ error: "Forbidden." });
-  }
-  if (!session.mediaPath || !fs.existsSync(session.mediaPath)) {
-    return res.status(404).json({ error: "Recording file not found." });
-  }
-  return res.download(session.mediaPath, `security-verification-${session.id}${path.extname(session.mediaPath)}`);
-});
 
+  if (!session) {
+    return res.status(404).json({
+      error: "Verification session not found."
+    });
+  }
+
+  if (!req.user!.isOwner && session.userId !== req.user!.id) {
+    return res.status(403).json({
+      error: "Forbidden."
+    });
+  }
+
+  if (!session.mediaPath || !fs.existsSync(session.mediaPath)) {
+    return res.status(404).json({
+      error: "Recording file not found."
+    });
+  }
+
+  /*
+   * Security Verification recordings are created as WebM by
+   * MediaRecorder in the existing frontend recording flow.
+   * Explicitly send the correct MIME type so the browser video
+   * player can decode the response correctly.
+   */
+  res.setHeader("Content-Type", "video/webm");
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename="security-verification-${session.id}.webm"`
+  );
+
+  return res.sendFile(path.resolve(session.mediaPath));
+});
 export default router;
+
+
+
 
 
 

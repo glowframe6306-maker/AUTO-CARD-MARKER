@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { fetcher, getApiUrl } from "../lib/api";
+﻿import { useEffect, useState } from "react";
+import { authFetch, fetcher, getApiUrl } from "../lib/api";
 
 export default function Reports() {
   const [data, setData] = useState<any>(null);
@@ -37,11 +37,90 @@ export default function Reports() {
 
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap gap-3">
-          <a href={`${getApiUrl()}/api/reports/payments/export/csv`} className="button">Download CSV</a>
-          <a href={`${getApiUrl()}/api/reports/payments/export/excel`} className="button">Download Excel</a>
-          <a href={`${getApiUrl()}/api/reports/payments/export/pdf`} className="button">Download PDF</a>
+          <button
+            type="button"
+            className="button"
+            onClick={async () => {
+              const response = await authFetch(
+                `${getApiUrl()}/api/reports/payments/export/csv`
+              );
+
+              if (!response.ok) {
+                throw new Error("CSV download failed.");
+              }
+
+              const blob = await response.blob();
+              const url = window.URL.createObjectURL(blob);
+              const link = document.createElement("a");
+
+              link.href = url;
+              link.download = "payments-report.csv";
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+              window.URL.revokeObjectURL(url);
+            }}
+          >
+            Download CSV
+          </button>
+
+          <button
+            type="button"
+            className="button"
+            onClick={async () => {
+              const response = await authFetch(
+                `${getApiUrl()}/api/reports/payments/export/excel`
+              );
+
+              if (!response.ok) {
+                throw new Error("Excel download failed.");
+              }
+
+              const blob = await response.blob();
+              const url = window.URL.createObjectURL(blob);
+              const link = document.createElement("a");
+
+              link.href = url;
+              link.download = "payments-report.xlsx";
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+              window.URL.revokeObjectURL(url);
+            }}
+          >
+            Download Excel
+          </button>
+
+          <button
+            type="button"
+            className="button"
+            onClick={async () => {
+              const response = await authFetch(
+                `${getApiUrl()}/api/reports/payments/export/pdf`
+              );
+
+              if (!response.ok) {
+                throw new Error("PDF download failed.");
+              }
+
+              const blob = await response.blob();
+              const url = window.URL.createObjectURL(blob);
+              const link = document.createElement("a");
+
+              link.href = url;
+              link.download = "payments-report.pdf";
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+              window.URL.revokeObjectURL(url);
+            }}
+          >
+            Download PDF
+          </button>
         </div>
       </div>
     </div>
   );
 }
+
+

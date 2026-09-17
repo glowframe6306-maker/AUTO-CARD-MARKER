@@ -37,6 +37,30 @@ router.get("/dashboard", authMiddleware_1.authenticate, async (req, res) => {
         const inactiveMembers = await prisma_1.default.memberProfile.count({
             where: { status: "INACTIVE" },
         });
+        const totalOpenMonths = await prisma_1.default.monthlyRecord.count({
+            where: {
+                isClosed: false,
+            },
+        });
+        const completedPayments = await prisma_1.default.payment.findMany({
+            where: {
+                status: "COMPLETED",
+            },
+            select: {
+                paymentAmount: true,
+            },
+        });
+        const totalAmount = completedPayments.reduce((sum, payment) => sum + Number(payment.paymentAmount || 0), 0);
+        const pendingApprovals = await prisma_1.default.approvalRequest.count({
+            where: {
+                status: "PENDING",
+            },
+        });
+        const pendingPaymentReview = await prisma_1.default.ocrResult.count({
+            where: {
+                status: "REVIEW",
+            },
+        });
         /*
          * ------------------------------------------------------------
          * CURRENT MONTH
@@ -147,27 +171,48 @@ router.get("/dashboard", authMiddleware_1.authenticate, async (req, res) => {
                 status: "PENDING",
             },
         });
+        const pendingAmount = Math.max(totalOpenMonths * totalMembers * monthlyAmount - totalAmount, 0);
         /*
          * ------------------------------------------------------------
          * LOGIN / LOGOUT ACTIVITY
          * ------------------------------------------------------------
          */
         const recentLoginLogout = await prisma_1.default.auditLog.findMany({
-            where: {
-                action: {
-                    in: ["LOGIN", "LOGOUT"],
-                },
-            },
             orderBy: {
                 createdAt: "desc",
             },
-            take: 10,
+            take: 50,
             include: {
                 actor: {
                     select: {
                         id: true,
                         accountId: true,
                         fullName: true,
+                        email: true,
+                        isOwner: true,
+                        roles: {
+                            include: {
+                                role: true,
+                            },
+                        },
+                        memberProfile: {
+                            select: {
+                                memberId: true,
+                            },
+                        },
+                        devices: {
+                            orderBy: {
+                                lastActive: "desc",
+                            },
+                            take: 1,
+                            select: {
+                                deviceName: true,
+                                platform: true,
+                                browser: true,
+                                ipAddress: true,
+                                deviceIdentifier: true,
+                            },
+                        },
                     },
                 },
             },
@@ -181,18 +226,62 @@ router.get("/dashboard", authMiddleware_1.authenticate, async (req, res) => {
             status: payment.status,
             account: payment.member.memberId,
         }));
-        const activity = recentLoginLogout.map((event) => ({
-            id: event.id,
-            type: event.action,
-            action: event.action,
-            event: event.action,
-            userId: event.actorId,
-            userName: event.actor.fullName,
-            accountId: event.actor.accountId,
-            timestamp: event.createdAt,
-            status: event.status,
-            reason: event.reason,
-        }));
+        const activity = recentLoginLogout.map((event) => {
+            const device = event.actor.devices?.[0] ?? null;
+            const roleNames = event.actor.roles
+                ?.map((item) => item.role?.name)
+                .filter(Boolean);
+            return {
+                id: event.id,
+                type: event.action,
+                action: event.action,
+                event: event.action,
+                userId: event.actorId,
+                userName: event.actor.fullName,
+                accountId: event.actor.accountId,
+                email: event.actor.email,
+                rcNo: event.actor.memberProfile?.memberId ?? event.actor.accountId,
+                device: device
+                    ? {
+                        name: device.deviceName,
+                        platform: device.platform,
+                        browser: device.browser,
+                        ipAddress: device.ipAddress,
+                        deviceIdentifier: device.deviceIdentifier,
+                    }
+                    : null,
+                role: event.actor.isOwner
+                    ? "OWNER"
+                    : (roleNames?.join(", ") || "MEMBER"),
+                timestamp: event.createdAt,
+                date: event.createdAt,
+                time: event.createdAt,
+                status: event.status,
+                reason: event.reason,
+                details: {
+                    targetType: event.targetType,
+                    targetId: event.targetId,
+                    oldValue: event.oldValue,
+                    newValue: event.newValue,
+                },
+            };
+        });
+        console.log("OWNER DASHBOARD LIVE DATA:", {
+            totalMembers,
+            totalOpenMonths,
+            totalAmount,
+            pendingAmount,
+            pendingApprovals,
+            pendingPaymentReview,
+        });
+        console.log("OWNER_DASHBOARD_VALUES", {
+            totalMembers,
+            totalOpenMonths,
+            totalAmount,
+            pendingAmount,
+            pendingApprovals,
+            pendingPaymentReview,
+        });
         return res.json({
             /*
              * MEMBERS
@@ -200,6 +289,13 @@ router.get("/dashboard", authMiddleware_1.authenticate, async (req, res) => {
             totalMembers,
             activeMembers,
             inactiveMembers,
+            totalMonths: totalOpenMonths,
+            totalOpenMonths,
+            totalAmount,
+            pendingAmount,
+            pendingApprovals,
+            pendingPaymentReview,
+            pendingPaymentReviews: pendingPaymentReview,
             /*
              * CURRENT MONTH PAYMENT SUMMARY
              */
@@ -223,6 +319,7 @@ router.get("/dashboard", authMiddleware_1.authenticate, async (req, res) => {
             recentPayments,
             recentLoginLogout: activity,
             recentActivity: activity,
+            systemActivity: activity,
             /*
              * Dashboard month information.
              */

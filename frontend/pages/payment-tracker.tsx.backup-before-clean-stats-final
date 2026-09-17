@@ -1,0 +1,637 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import { fetcher, getApiUrl } from "../lib/api";
+import { useAuth } from "../lib/useAuth";
+
+type Payment = {
+  id: number;
+  memberId: number;
+  month: number;
+  paymentAmount: number;
+  paymentDate: string;
+  totalWeeks: number;
+  status: string;
+  notes?: string | null;
+  member?: {
+    memberId?: string;
+    fullName?: string;
+  };
+};
+
+const statusClass = (status: string) => {
+  switch (status) {
+    case "COMPLETED":
+      return "bg-emerald-100 text-emerald-700";
+    case "PENDING":
+      return "bg-amber-100 text-amber-700";
+    case "FAILED":
+      return "bg-red-100 text-red-700";
+    case "REFUNDED":
+      return "bg-purple-100 text-purple-700";
+    case "REVIEW":
+      return "bg-blue-100 text-blue-700";
+    case "CORRECTED":
+      return "bg-slate-100 text-slate-700";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+};
+
+const monthName = (month: number) => {
+  const names = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+
+  return names[month - 1] || `Month ${month}`;
+};
+
+export default function PaymentTracker() {
+  const { user, isLoading } = useAuth();
+
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [monthRecords, setMonthRecords] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    pendingMonths: 0,
+    pendingAmount: 0,
+    paidMonths: 0,
+    paidAmount: 0,
+    failedPayments: 0,
+  });
+
+  const [search, setSearch] = useState("");
+  const [monthFilter, setMonthFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user || isLoading) return;
+
+    const loadTracker = async () => {
+      try {
+        setError(null);
+
+        const isOwner = user?.isOwner === true;
+
+        if (!isOwner && user.memberProfile?.memberId) {
+          const [memberData, monthData] = await Promise.all([
+            fetcher(
+              `${getApiUrl()}/api/payments/member/${user.memberProfile.memberId}`
+            ),
+            fetcher(`${getApiUrl()}/api/months`),
+          ]);
+
+          const memberPayments: Payment[] = Array.isArray(memberData)
+            ? memberData
+            : [];
+
+          const availableMonths = Array.isArray(monthData)
+            ? monthData
+            : [];
+
+          setPayments(memberPayments);
+          setMonthRecords(availableMonths);
+
+          const normalizeStatus = (value: unknown) =>
+            String(value ?? "").trim().toUpperCase();
+
+          const paidPayments = memberPayments.filter((payment) => {
+            const status = normalizeStatus(payment.status);
+            return (
+              status === "COMPLETED" ||
+              status === "PAID" ||
+              status === "SUCCESS" ||
+              status === "SUCCESSFUL"
+            );
+          });
+
+          const pendingPayments = memberPayments.filter((payment) => {
+            const status = normalizeStatus(payment.status);
+            return (
+              status === "PENDING" ||
+              status === "AWAITING_MANUAL_SELECTION" ||
+              status === "REVIEW"
+            );
+          });
+
+          const failedPayments = memberPayments.filter((payment) => {
+            const status = normalizeStatus(payment.status);
+            return status === "FAILED" || status === "DENIED";
+          });
+
+
+          const paidMonthNumbers = new Set(
+            paidPayments.map((payment) => Number(payment.month))
+          );
+
+          const pendingMonthNumbers = new Set(
+            pendingPayments.map((payment) => Number(payment.month))
+          );
+
+          const displayedPaidMonths = availableMonths.filter(
+            (record) =>
+              paidMonthNumbers.has(Number(record.month))
+          );
+
+          const displayedPendingMonths = availableMonths.filter(
+            (record) =>
+              record.isClosed === false &&
+              pendingMonthNumbers.has(Number(record.month))
+          );
+
+          const paidAmount = paidPayments.reduce(
+            (total, payment) =>
+              total + Number(payment.paymentAmount || 0),
+            0
+          );
+
+          const pendingAmount = pendingPayments.reduce(
+            (total, payment) =>
+              total + Number(payment.paymentAmount || 0),
+            0
+          );
+
+          setStats({
+            pendingMonths: displayedPendingMonths.length,
+            pendingAmount,
+            paidMonths: paidMonthNumbers.size,
+            paidAmount,
+            failedPayments: failedPayments.length,
+          });
+
+          return;
+        }
+
+        const [adminData, monthData] = await Promise.all([
+          fetcher(`${getApiUrl()}/api/payments/admin/all`),
+          fetcher(`${getApiUrl()}/api/months`),
+        ]);
+
+        const adminPayments: Payment[] = Array.isArray(adminData)
+          ? adminData
+          : [];
+
+        setPayments(adminPayments);
+        setMonthRecords(Array.isArray(monthData) ? monthData : []);
+
+        const normalizeStatus = (value: unknown) =>
+          String(value ?? "").trim().toUpperCase();
+
+        const paidAdminPayments = adminPayments.filter((payment) =>
+          [
+            "COMPLETED",
+            "PAID",
+            "SUCCESS",
+            "SUCCESSFUL",
+          ].includes(normalizeStatus(payment.status))
+        );
+
+        const pendingAdminPayments = adminPayments.filter((payment) =>
+          [
+            "PENDING",
+            "AWAITING_MANUAL_SELECTION",
+            "REVIEW",
+          ].includes(normalizeStatus(payment.status))
+        );
+
+        const failedAdminPayments = adminPayments.filter((payment) =>
+          ["FAILED", "DENIED"].includes(normalizeStatus(payment.status))
+        );
+
+        const paidAdminMonths = new Set(
+          paidAdminPayments.map((payment) => Number(payment.month))
+        );
+
+        const pendingAdminMonths = new Set(
+          pendingAdminPayments.map((payment) => Number(payment.month))
+        );
+
+        setStats({
+          pendingMonths: pendingAdminMonths.size,
+          pendingAmount: pendingAdminPayments.reduce(
+            (total, payment) =>
+              total + Number(payment.paymentAmount || 0),
+            0
+          ),
+          paidMonths: paidAdminMonths.size,
+          paidAmount: paidAdminPayments.reduce(
+            (total, payment) =>
+              total + Number(payment.paymentAmount || 0),
+            0
+          ),
+          failedPayments: failedAdminPayments.length,
+        });
+      } catch (err: any) {
+        setError(err?.message || "Unable to load payment tracker.");
+      }
+    };
+
+    loadTracker();
+  }, [user, isLoading]);
+
+  const filteredPayments = useMemo(() => {
+    return payments.filter((payment) => {
+      const searchValue = search.trim().toLowerCase();
+
+      const matchesSearch =
+        searchValue === "" ||
+        String(payment.id).includes(searchValue) ||
+        String(payment.memberId).includes(searchValue) ||
+        String(payment.member?.memberId || "")
+          .toLowerCase()
+          .includes(searchValue) ||
+        String(payment.member?.fullName || "")
+          .toLowerCase()
+          .includes(searchValue);
+
+      const matchesStatus =
+        statusFilter === "ALL" || payment.status === statusFilter;
+
+      const matchesMonth =
+        monthFilter === "ALL" ||
+        String(payment.month) === monthFilter;
+
+      return matchesSearch && matchesStatus && matchesMonth;
+    });
+  }, [payments, search, statusFilter, monthFilter]);
+
+  const monthlyStatus = useMemo(() => {
+    const months = Array.from({ length: 12 }, (_, index) => index + 1);
+
+    const normalizeStatus = (value: unknown) =>
+      String(value ?? "").trim().toUpperCase();
+
+    return months.map((month) => {
+      const monthRecord = monthRecords.find(
+        (record) => Number(record.month) === month
+      );
+
+      if (!monthRecord) {
+        return {
+          month,
+          status: "",
+        };
+      }
+
+      const memberPaid = payments.some(
+        (payment) =>
+          Number(payment.month) === month &&
+          [
+            "COMPLETED",
+            "PAID",
+            "SUCCESS",
+            "SUCCESSFUL",
+          ].includes(normalizeStatus(payment.status))
+      );
+
+      if (memberPaid) {
+        return {
+          month,
+          status: "PAID",
+        };
+      }
+
+      if (monthRecord.isClosed === false) {
+        return {
+          month,
+          status: "UNPAID",
+        };
+      }
+
+      return {
+        month,
+        status: "",
+      };
+    });
+  }, [payments, monthRecords]);
+  const trackerStats = useMemo(() => {
+    const paidMonths = new Set(
+      monthlyStatus
+        .filter((item) => item.status === "PAID")
+        .map((item) => Number(item.month))
+    );
+
+    const unpaidMonths = new Set(
+      monthlyStatus
+        .filter((item) => item.status === "UNPAID")
+        .map((item) => Number(item.month))
+    );
+
+    const failedPayments = payments.filter((payment) =>
+      ["FAILED", "DENIED"].includes(
+        String(payment.status ?? "").trim().toUpperCase()
+      )
+    );
+
+    const paidPayments = payments.filter((payment) =>
+      paidMonths.has(Number(payment.month))
+    );
+
+    const pendingPayments = payments.filter((payment) =>
+      unpaidMonths.has(Number(payment.month))
+    );
+
+    return {
+      paidMonths: paidMonths.size,
+      paidAmount: paidPayments.reduce(
+        (total, payment) =>
+          total + Number(payment.paymentAmount || 0),
+        0
+      ),
+      pendingMonths: unpaidMonths.size,
+      pendingAmount: pendingPayments.reduce(
+        (total, payment) =>
+          total + Number(payment.paymentAmount || 0),
+        0
+      ),
+      failedPayments: failedPayments.length,
+    };
+  }, [payments, monthlyStatus]);
+  const statCards = [
+    {
+      title: "TOTAL PENDING MONTHS",
+      value: trackerStats.pendingMonths.toLocaleString(),
+      description: "Total pending months",
+    },
+    {
+      title: "TOTAL PENDING AMOUNT",
+      value: `Rs. ${trackerStats.pendingAmount.toLocaleString()}`,
+      description: "Total pending amount",
+    },
+    {
+      title: "PAID MONTHS",
+      value: payments.filter((payment) =>
+        ["COMPLETED", "PAID", "SUCCESS", "SUCCESSFUL"].includes(
+          String(payment.status ?? "").trim().toUpperCase()
+        )
+      ).length.toLocaleString(),
+      description: "Completed payment months",
+    },
+    {
+      title: "PAID AMOUNT",
+      value: `Rs. ${payments
+        .filter((payment) =>
+          ["COMPLETED", "PAID", "SUCCESS", "SUCCESSFUL"].includes(
+            String(payment.status ?? "").trim().toUpperCase()
+          )
+        )
+        .reduce(
+          (total, payment) =>
+            total + Number(payment.paymentAmount || 0),
+          0
+        )
+        .toLocaleString()}`,
+      description: "Total paid amount",
+    },
+    {
+      title: "FAILED PAYMENTS",
+      value: trackerStats.failedPayments.toLocaleString(),
+      description: "Failed or denied payments",
+    },
+  ];
+  return (
+    <div className="space-y-6">
+      <header>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Payment Tracker
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Track monthly payments, payment status and payment history.
+          </p>
+        </div>
+      </header>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* PAYMENT STATISTICS */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {statCards.map((card) => (
+          <div
+            key={card.title}
+            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <p className="text-xs font-bold tracking-wide text-slate-500">
+              {card.title}
+            </p>
+
+            <p className="mt-3 text-2xl font-bold text-slate-900">
+              {card.value}
+            </p>
+
+            <p className="mt-1 text-xs text-slate-500">
+              {card.description}
+            </p>
+          </div>
+        ))}
+      </section>
+
+      {/* MONTHLY PAYMENT STATUS */}
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="text-lg font-bold text-slate-900">
+            Monthly Payment Status
+          </h2>
+          <p className="text-sm text-slate-500">
+            Payment status for each month.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {monthlyStatus.map((item) => (
+            <div
+              key={item.month}
+              className="flex items-center justify-between rounded-xl border border-slate-200 p-4"
+            >
+              <div>
+                <p className="font-semibold text-slate-900">
+                  {monthName(item.month)}
+                </p>
+                <p className="text-xs text-slate-500">
+                  Monthly payment
+                </p>
+              </div>
+
+              {item.status && (
+                <span
+                  className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700"
+                >
+                  {item.status}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* PAYMENT HISTORY */}
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="text-lg font-bold text-slate-900">
+            Payment History
+          </h2>
+          <p className="text-sm text-slate-500">
+            Complete payment transaction history.
+          </p>
+        </div>
+
+        {/* FILTERS */}
+        <div className="grid grid-cols-1 gap-3 border-b border-slate-200 p-5 md:grid-cols-3">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search payment or member..."
+            className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-slate-500"
+          />
+
+          <select
+            value={monthFilter}
+            onChange={(e) => setMonthFilter(e.target.value)}
+            className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none"
+          >
+            <option value="ALL">All Months</option>
+
+            {Array.from({ length: 12 }, (_, index) => index + 1).map(
+              (month) => (
+                <option key={month} value={month}>
+                  {monthName(month)}
+                </option>
+              )
+            )}
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none"
+          >
+            <option value="ALL">All Status</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="PENDING">Pending</option>
+            <option value="AWAITING_MANUAL_SELECTION">
+              Awaiting Manual Selection
+            </option>
+            <option value="FAILED">Failed</option>
+            <option value="DENIED">Denied</option>
+            <option value="REVIEW">Review</option>
+            <option value="REFUNDED">Refunded</option>
+          </select>
+        </div>
+
+        {/* TABLE */}
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50">
+              <tr className="text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                <th className="px-5 py-3">Payment ID</th>
+                <th className="px-5 py-3">Member</th>
+                <th className="px-5 py-3">Month</th>
+                <th className="px-5 py-3">Amount</th>
+                <th className="px-5 py-3">Weeks</th>
+                <th className="px-5 py-3">Date</th>
+                <th className="px-5 py-3">Status</th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-slate-100">
+              {filteredPayments.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-5 py-10 text-center text-sm text-slate-500"
+                  >
+                    No payment history found.
+                  </td>
+                </tr>
+              ) : (
+                filteredPayments.map((payment) => (
+                  <tr key={payment.id} className="hover:bg-slate-50">
+                    <td className="px-5 py-4 font-semibold text-slate-900">
+                      #{payment.id}
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <div className="font-medium text-slate-900">
+                        {payment.member?.fullName ||
+                          `Member ${payment.memberId}`}
+                      </div>
+
+                      {payment.member?.memberId && (
+                        <div className="text-xs text-slate-500">
+                          {payment.member.memberId}
+                        </div>
+                      )}
+                    </td>
+
+                    <td className="px-5 py-4">
+                      {monthName(Number(payment.month))}
+                    </td>
+
+                    <td className="px-5 py-4 font-semibold">
+                      Rs. {Number(payment.paymentAmount || 0).toLocaleString()}
+                    </td>
+
+                    <td className="px-5 py-4">
+                      {payment.totalWeeks}
+                    </td>
+
+                    <td className="px-5 py-4">
+                      {payment.paymentDate
+                        ? new Date(
+                            payment.paymentDate
+                          ).toLocaleDateString()
+                        : "--"}
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass(
+                          payment.status
+                        )}`}
+                      >
+                        {payment.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="border-t border-slate-200 px-5 py-4 text-sm text-slate-500">
+          Showing {filteredPayments.length} payment record
+          {filteredPayments.length === 1 ? "" : "s"}.
+        </div>
+      </section>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

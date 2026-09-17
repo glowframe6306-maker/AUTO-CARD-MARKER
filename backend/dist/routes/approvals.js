@@ -86,6 +86,17 @@ async function applyApproval(approval) {
                 data: newValue,
             });
             break;
+        case "LOGOUT": {
+            const userId = Number(targetId);
+            if (!Number.isInteger(userId) || userId <= 0) {
+                throw new Error("Invalid logout target user ID.");
+            }
+            await prisma_1.default.user.update({
+                where: { id: userId },
+                data: { status: "INACTIVE" },
+            });
+            break;
+        }
         case "REGISTRATION": {
             const pendingId = Number(targetId);
             if (!Number.isInteger(pendingId) || pendingId <= 0) {
@@ -138,6 +149,17 @@ async function applyApproval(approval) {
                         approvedAt: new Date(),
                     },
                 });
+                await prisma_1.default.notification.create({
+                    data: {
+                        recipientId: existingAccount?.id ?? existingMemberProfile.user.id,
+                        type: "REGISTRATION_APPROVED",
+                        title: "Registration Approved",
+                        message: "Your registration has been approved successfully. You can now log in to your Member account.",
+                        metadata: {
+                            registrationId: pendingId,
+                        },
+                    },
+                });
                 console.log(`Registration ${pendingId} already matched an active member account; marking as approved without duplication.`);
                 break;
             }
@@ -185,6 +207,17 @@ async function applyApproval(approval) {
                     },
                 });
                 return createdUser;
+            });
+            await prisma_1.default.notification.create({
+                data: {
+                    recipientId: result.id,
+                    type: "REGISTRATION_APPROVED",
+                    title: "Registration Approved",
+                    message: "Your registration has been approved successfully. You can now log in to your Member account.",
+                    metadata: {
+                        registrationId: pendingId,
+                    },
+                },
             });
             console.log(`Registration ${pendingId} approved. User ${result.id} and MemberProfile ${result.memberProfile?.id} created.`);
             break;

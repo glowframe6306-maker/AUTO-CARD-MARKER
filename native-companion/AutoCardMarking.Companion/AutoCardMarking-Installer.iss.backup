@@ -1,0 +1,33 @@
+﻿#define MyAppName "AUTO CARD MARKING"
+#define MyAppVersion "1.0.0"
+#define MyAppPublisher "READERS CIRCLE"
+#define MyAppExeName "AutoCardMarking-Windows.exe"
+
+[Setup]
+AppId={{A8F7E0A1-7C9E-4B89-9B45-AUTO-CARD-MARKING}}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+DefaultDirName={autopf}\AUTO CARD MARKING
+DefaultGroupName=AUTO CARD MARKING
+OutputDir=C:\Users\Administrator\AUTO-CARD-MARKING\native-companion\AutoCardMarking.Companion\installer-output
+OutputBaseFilename=READERS-CIRCLE-Windows-Setup
+Compression=lzma
+SolidCompression=yes
+ArchitecturesInstallIn64BitMode=x64
+PrivilegesRequired=admin
+DisableProgramGroupPage=yes
+UninstallDisplayName=AUTO CARD MARKING
+
+[Files]
+Source: "C:\Users\Administrator\AUTO-CARD-MARKING\frontend\public\downloads\AutoCardMarking-Windows.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+[Icons]
+Name: "{autoprograms}\AUTO CARD MARKING"; Filename: "{app}\AutoCardMarking-Windows.exe"
+Name: "{autodesktop}\AUTO CARD MARKING"; Filename: "{app}\AutoCardMarking-Windows.exe"; Tasks: desktopicon
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
+
+[Run]
+Filename: "{app}\AutoCardMarking-Windows.exe"; Description: "Launch AUTO CARD MARKING"; Flags: nowait postinstall skipifsilent

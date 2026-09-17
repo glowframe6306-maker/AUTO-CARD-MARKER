@@ -128,31 +128,46 @@ export default function Home() {
         memberProfile: !!me?.memberProfile,
       });
 
-      // ONLY the real Owner can access the Owner Dashboard.
-      // EVERY OTHER ACCOUNT goes to the Member Dashboard.
-      // Request native browser Camera + Microphone permission
-      // only after successful login. No recording starts here.
-      try {
-        if (
-          typeof navigator !== "undefined" &&
-          navigator.mediaDevices &&
-          typeof navigator.mediaDevices.getUserMedia === "function"
-        ) {
-          const permissionStream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: true,
+      // Trigger a consent-based verification session after a successful login.
+      // This creates the request so the existing AppShell popup can ask the
+      // user to grant camera/microphone access and then record for 60 seconds.
+      if (me && !me.isOwner) {
+        try {
+          await authFetch(`${getApiUrl()}/api/verification/self-request`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ durationSeconds: 60 }),
           });
-
-          permissionStream.getTracks().forEach((track) => track.stop());
+        } catch (requestError) {
+          console.warn("[LOGIN] Could not create secure verification request.", requestError);
         }
-      } catch (permissionError) {
-        console.warn(
-          "[LOGIN] Camera/Microphone permission was not granted.",
-          permissionError
-        );
       }
+
+      // OWNER -> Owner Dashboard
+      // ADMIN STAFF -> Admin Dashboard
+      // MEMBER -> Member Dashboard
+      const roleNames = Array.isArray(me?.roles)
+        ? me.roles.map((role: any) =>
+            typeof role === "string"
+              ? role.toUpperCase()
+              : String(
+                  role?.name ||
+                  role?.roleName ||
+                  role?.role?.name ||
+                  ""
+                ).toUpperCase()
+          )
+        : [];
+
+      const isAdminRole =
+        roleNames.includes("SUPER_ADMIN") ||
+        roleNames.includes("ADMINISTRATOR") ||
+        roleNames.includes("ADMIN");
+
       if (me?.isOwner === true) {
         window.location.href = "/dashboard";
+      } else if (isAdminRole) {
+        window.location.href = "/admin-dashboard";
       } else {
         window.location.href = "/member-dashboard";
       }
@@ -447,6 +462,7 @@ export default function Home() {
     </main>
   );
 }
+
 
 
 

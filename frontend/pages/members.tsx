@@ -30,6 +30,7 @@ export default function Members() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const loadMembers = async () => {
@@ -50,7 +51,7 @@ export default function Members() {
   };
 
   useEffect(() => {
-    loadMembers();
+    void loadMembers();
   }, []);
 
   const getAccountId = (member: Member) => {
@@ -201,6 +202,64 @@ export default function Members() {
     }
   };
 
+  const handleRoleChange = async (member: Member) => {
+    const userId = member.user?.id || member.userId;
+
+    if (!userId) {
+      alert("User ID is not available for this member.");
+      return;
+    }
+
+    const roleNames =
+      member.user?.roles
+        ?.map((item) => item.role?.name)
+        .filter(Boolean) || [];
+
+    const isAdmin = roleNames.some(
+      (role) => String(role).toUpperCase() === "ADMIN"
+    );
+
+    const targetRole = isAdmin ? "MEMBER" : "ADMIN";
+
+    const confirmed = window.confirm(
+      isAdmin
+        ? `Demote "${member.fullName || member.memberId}" to Member?`
+        : `Promote "${member.fullName || member.memberId}" to Admin?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setBusyId(member.memberId || String(userId));
+
+      await fetcher(
+        `${getApiUrl()}/api/users/${encodeURIComponent(String(userId))}/role`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            roleName: targetRole,
+          }),
+        }
+      );
+
+      await loadMembers();
+      setOpenMenu(null);
+      setMoreOptionsOpen(null);
+
+      alert(
+        targetRole === "ADMIN"
+          ? "Member promoted to Admin successfully."
+          : "Admin demoted to Member successfully."
+      );
+    } catch (err: any) {
+      alert(err?.message || "Failed to update member role.");
+    } finally {
+      setBusyId(null);
+    }
+  };
   const handleViewDetails = (member: Member) => {
     if (!member.memberId) return;
 
@@ -426,14 +485,14 @@ export default function Members() {
                                 : memberId
                             )
                           }
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xl font-black text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xl font-black text-black shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                           aria-label="Member actions"
                         >
                           ⋮
                         </button>
 
                         {openMenu === memberId && (
-                          <div className="absolute right-5 top-16 z-50 w-52 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 text-left shadow-2xl">
+                          <div className="absolute right-5 top-16 z-50 w-52 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 text-left text-black shadow-2xl">
 
                             <button
                               type="button"
@@ -467,6 +526,51 @@ export default function Members() {
                               >
                                 🔓 Unblock Account
                               </button>
+                            )}
+
+                            <div className="my-1 border-t border-slate-100" />
+
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                setMoreOptionsOpen(
+                                  moreOptionsOpen === memberId
+                                    ? null
+                                    : memberId
+                                )
+                              }
+                              className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                            >
+                              ⚙ More Options
+                            </button>
+
+                            {moreOptionsOpen === memberId && (
+                              <div className="mt-1 rounded-xl border border-slate-100 bg-slate-50 p-1">
+                                {String(getRole(member)).toUpperCase().split(",").map((role) => role.trim()).includes("ADMIN") ? (
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      handleRoleChange(member)
+                                    }
+                                    className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-orange-700 hover:bg-orange-50 disabled:opacity-50"
+                                  >
+                                    ⬇ Demote To Member
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      handleRoleChange(member)
+                                    }
+                                    className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                                  >
+                                    ⬆ Promote To Admin
+                                  </button>
+                                )}
+                              </div>
                             )}
 
                             <div className="my-1 border-t border-slate-100" />
@@ -513,3 +617,8 @@ export default function Members() {
     </div>
   );
 }
+
+
+
+
+

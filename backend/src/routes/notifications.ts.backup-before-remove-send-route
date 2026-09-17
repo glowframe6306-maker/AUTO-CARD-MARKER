@@ -1,0 +1,162 @@
+﻿import { Router } from "express";
+import prisma from "../prisma";
+import {
+  authenticate,
+  AuthorizedRequest,
+  requireAnyRole,
+} from "../middleware/authMiddleware";
+
+const router = Router();
+router.use(authenticate);
+
+router.get("/", async (req: AuthorizedRequest, res) => {
+  const notifications = await prisma.notification.findMany({
+    where: { recipientId: req.user!.id },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return res.json(notifications);
+});
+
+router.post("/read/:id", async (req: AuthorizedRequest, res) => {
+  const notification = await prisma.notification.findUnique({
+    where: { id: Number(req.params.id) },
+  });
+
+  if (!notification) {
+    return res.status(404).json({ error: "Notification not found." });
+  }
+
+  if (notification.recipientId !== req.user!.id) {
+    return res.status(403).json({ error: "Forbidden." });
+  }
+
+  const updated = await prisma.notification.update({
+    where: { id: notification.id },
+    data: { read: true },
+  });
+
+  return res.json(updated);
+});
+
+router.post(
+  "/send",
+  requireAnyRole(["ADMINISTRATOR"]),
+  async (req: AuthorizedRequest, res) => {
+    const recipient = String(req.body?.recipient || "").trim().toUpperCase();
+    const message = String(req.body?.message || "").trim();
+
+    if (!["OWNER", "ADMIN"].includes(recipient)) {
+      return res.status(400).json({
+        error: "Recipient must be OWNER or ADMIN.",
+      });
+    }
+
+    if (!message) {
+      return res.status(400).json({
+        error: "Message is required.",
+      });
+    }
+
+    const sender = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: {
+        id: true,
+        accountId: true,
+        fullName: true,
+        email: true,
+        isOwner: true,
+      },
+    });
+
+    if (!sender) {
+      return res.status(404).json({ error: "Sender account not found." });
+    }
+
+    let recipients: Array<{
+      id: number;
+      accountId: string;
+      fullName: string;
+      email: string | null;
+    }> = [];
+
+    if (recipient === "OWNER") {
+      const owner = await prisma.user.findFirst({
+        where: { isOwner: true },
+        select: {
+          id: true,
+          accountId: true,
+          fullName: true,
+          email: true,
+        },
+      });
+
+      if (!owner) {
+        return res.status(404).json({ error: "Owner account not found." });
+      }
+
+      recipients = [owner];
+    }
+
+    if (recipient === "ADMIN") {
+      recipients = await prisma.user.findMany({
+        where: {
+          OR: [
+            { isOwner: true },
+            {
+              roles: {
+                some: {
+                  role: {
+                    name: "ADMINISTRATOR",
+                  },
+                },
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          accountId: true,
+          fullName: true,
+          email: true,
+        },
+        orderBy: { id: "asc" },
+      });
+    }
+
+    if (!recipients.length) {
+      return res.status(404).json({
+        error: "No matching recipient accounts found.",
+      });
+    }
+
+    const created = await prisma.$transaction(
+      recipients.map((target) =>
+        prisma.notification.create({
+          data: {
+            recipientId: target.id,
+            type: "DIRECT_MESSAGE",
+            title: recipient === "OWNER" ? "Message from Admin" : "Admin Message",
+            message,
+            metadata: {
+              senderId: sender.id,
+              senderAccountId: sender.accountId,
+              senderName: sender.fullName,
+              senderEmail: sender.email,
+              recipientType: recipient,
+              sentAt: new Date().toISOString(),
+            },
+          },
+        })
+      )
+    );
+
+    return res.status(201).json({
+      success: true,
+      sentCount: created.length,
+      notifications: created,
+    });
+  }
+);
+
+export default router;

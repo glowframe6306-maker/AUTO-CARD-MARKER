@@ -130,12 +130,14 @@ router.post("/", requirePermission("manage_members"), async (req: AuthorizedRequ
   }
 
   const { hashPassword } = await import("../utils/auth");
+  const { getSecondaryPasswordHash } = await import("../utils/secondaryPassword");
   const user = await prisma.user.create({
     data: {
       accountId: memberId,
       email,
       fullName,
       passwordHash: await hashPassword("ChangeMe123!"),
+      secondaryPasswordHash: await getSecondaryPasswordHash(),
       status: "ACTIVE",
       forcePasswordReset: true,
       memberProfile: {
@@ -388,6 +390,40 @@ router.get("/:memberId/details", authenticate, async (req: AuthorizedRequest, re
   return res.json({ member, payments, receipts, activities, summary: { totalPaid, paidWeeks, balanceWeeks, balanceMonths, balanceRupees } });
 });
 
+  router.get("/me/activity", authenticate, async (req: AuthorizedRequest, res) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    try {
+      const activity = await prisma.auditLog.findMany({
+        where: {
+          actorId: req.user.id,
+          action: {
+            in: ["LOGIN", "LOGOUT"],
+          },
+          status: "SUCCESS",
+        },
+        select: {
+          id: true,
+          action: true,
+          createdAt: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 20,
+      });
+
+      return res.json(activity);
+    } catch (error) {
+      console.error("Failed to load member activity:", error);
+      return res.status(500).json({
+        error: "Unable to load recent activity.",
+      });
+    }
+  });
+
 router.get("/me", authenticate, async (req: AuthorizedRequest, res) => {
   if (!req.user) return res.status(401).json({ error: "Unauthorized" });
   const member = await prisma.memberProfile.findFirst({ where: { userId: req.user.id } });
@@ -601,7 +637,9 @@ router.delete("/:memberId", requirePermission("manage_members"), async (req: Aut
   const { memberId } = req.params;
 
   if (!req.user?.isOwner) {
-    return res.status(403).json({ error: "Only the Owner can delete members." });
+    return res.status(403).json({
+      error: "Only the Owner can delete members."
+    });
   }
 
   const member = await prisma.memberProfile.findUnique({
@@ -610,48 +648,348 @@ router.delete("/:memberId", requirePermission("manage_members"), async (req: Aut
   });
 
   if (!member) {
-    return res.status(404).json({ error: "Member not found." });
+    return res.status(404).json({
+      error: "Member not found."
+    });
   }
 
   if (member.user.isOwner) {
-    return res.status(403).json({ error: "The Owner account cannot be deleted." });
+    return res.status(403).json({
+      error: "The Owner account cannot be deleted."
+    });
   }
 
-  /*
-   * Safety check:
-   * Never allow the permanent Owner account to be deleted.
-   */
-  await prisma.$transaction(async (tx) => {
-    await tx.memberProfile.delete({
-      where: { memberId },
-    });
+  const userId = member.userId;
+  const ownerId = req.user.id;
 
-    await tx.user.delete({
-      where: { id: member.userId },
-    });
+  try {
+    await prisma.$transaction(async (tx) => {
 
-    await tx.auditLog.create({
-      data: {
-        actorId: req.user!.id,
-        actorRole: req.user!.roles.join(","),
-        action: "DELETE_MEMBER",
-        targetType: "MEMBER",
-        targetId: memberId,
-        status: "SUCCESS",
-        oldValue: {
-          accountId: member.user.accountId,
-          fullName: member.user.fullName,
-          email: member.user.email,
+      /*
+       * Delete role assignments first.
+       * This directly resolves UserRole_userId_fkey.
+       */
+      await tx.userRole.deleteMany({
+        where: { userId }
+      });
+
+      /*
+       * Remove member payment requests.
+       */
+      await tx.paymentRequest.deleteMany({
+        where: {
+          memberId: member.id
+        }
+      });
+
+      /*
+       * Remove receipts and payments belonging to this member.
+       */
+      const payments = await tx.payment.findMany({
+        where: {
+          memberId: member.id
         },
-      },
-    });
-  });
+        select: {
+          id: true
+        }
+      });
 
-  return res.json({
-    message: "Member deleted successfully.",
-  });
+      const paymentIds = payments.map((item) => item.id);
+
+      if (paymentIds.length > 0) {
+        await tx.cardUpload.updateMany({
+          where: {
+            paymentId: {
+              in: paymentIds
+            }
+          },
+          data: {
+            paymentId: null
+          }
+        });
+
+        await tx.receipt.deleteMany({
+          where: {
+            paymentId: {
+              in: paymentIds
+            }
+          }
+        });
+
+        await tx.auditLog.deleteMany({
+          where: {
+            paymentId: {
+              in: paymentIds
+            }
+          }
+        });
+
+        await tx.payment.deleteMany({
+          where: {
+            id: {
+              in: paymentIds
+            }
+          }
+        });
+      }
+
+      await tx.receipt.deleteMany({
+        where: {
+          memberId: member.id
+        }
+      });
+
+      /*
+       * Remove member card uploads and OCR records.
+       */
+      const uploads = await tx.cardUpload.findMany({
+        where: {
+          memberId: member.id
+        },
+        select: {
+          id: true
+        }
+      });
+
+      const uploadIds = uploads.map((item) => item.id);
+
+      if (uploadIds.length > 0) {
+        const ocrResults = await tx.ocrResult.findMany({
+          where: {
+            cardUploadId: {
+              in: uploadIds
+            }
+          },
+          select: {
+            id: true
+          }
+        });
+
+        const ocrIds = ocrResults.map((item) => item.id);
+
+        if (ocrIds.length > 0) {
+          await tx.ocrReview.deleteMany({
+            where: {
+              ocrResultId: {
+                in: ocrIds
+              }
+            }
+          });
+        }
+
+        await tx.ocrResult.deleteMany({
+          where: {
+            cardUploadId: {
+              in: uploadIds
+            }
+          }
+        });
+
+        await tx.cardUpload.deleteMany({
+          where: {
+            id: {
+              in: uploadIds
+            }
+          }
+        });
+      }
+
+      /*
+       * Remove the user's security verification/device records.
+       */
+      await tx.cameraVerificationSession.deleteMany({
+        where: {
+          OR: [
+            { userId },
+            { requestedById: userId }
+          ]
+        }
+      });
+
+      await tx.securityEvent.deleteMany({
+        where: {
+          userId
+        }
+      });
+
+      await tx.device.deleteMany({
+        where: {
+          userId
+        }
+      });
+
+      await tx.notification.deleteMany({
+        where: {
+          recipientId: userId
+        }
+      });
+
+      /*
+       * Preserve historical records that require a valid user.
+       */
+      await tx.payment.updateMany({
+        where: {
+          recordedById: userId
+        },
+        data: {
+          recordedById: ownerId
+        }
+      });
+
+      await tx.receipt.updateMany({
+        where: {
+          issuedById: userId
+        },
+        data: {
+          issuedById: ownerId
+        }
+      });
+
+      await tx.ocrReview.updateMany({
+        where: {
+          reviewerId: userId
+        },
+        data: {
+          reviewerId: ownerId
+        }
+      });
+
+      /*
+       * Nullable references.
+       */
+      await tx.approvalRequest.updateMany({
+        where: {
+          requesterId: userId
+        },
+        data: {
+          requesterId: null
+        }
+      });
+
+      await tx.approvalRequest.updateMany({
+        where: {
+          reviewerId: userId
+        },
+        data: {
+          reviewerId: null
+        }
+      });
+
+      await tx.paymentRequest.updateMany({
+        where: {
+          reviewedById: userId
+        },
+        data: {
+          reviewedById: null
+        }
+      });
+
+      await tx.paymentRequest.updateMany({
+        where: {
+          processedById: userId
+        },
+        data: {
+          processedById: null
+        }
+      });
+
+      await tx.monthlyRecord.updateMany({
+        where: {
+          closedById: userId
+        },
+        data: {
+          closedById: null
+        }
+      });
+
+      /*
+       * Keep old audit history valid by assigning it to Owner.
+       */
+      await tx.auditLog.updateMany({
+        where: {
+          actorId: userId
+        },
+        data: {
+          actorId: ownerId
+        }
+      });
+
+      /*
+       * User-owned records.
+       */
+      await tx.backup.deleteMany({
+        where: {
+          initiatedById: userId
+        }
+      });
+
+      await tx.collectionSession.deleteMany({
+        where: {
+          ownerId: userId
+        }
+      });
+
+      /*
+       * Delete MemberProfile.
+       */
+      await tx.memberProfile.delete({
+        where: {
+          memberId
+        }
+      });
+
+      /*
+       * Final permanent User delete.
+       * UserRole rows were already removed above.
+       */
+      await tx.user.delete({
+        where: {
+          id: userId
+        }
+      });
+
+      /*
+       * Save successful deletion audit under Owner.
+       */
+      await tx.auditLog.create({
+        data: {
+          actorId: ownerId,
+          actorRole: req.user!.roles.join(","),
+          action: "DELETE_MEMBER",
+          targetType: "MEMBER",
+          targetId: memberId,
+          status: "SUCCESS",
+          oldValue: {
+            accountId: member.user.accountId,
+            fullName: member.user.fullName,
+            email: member.user.email,
+          },
+        },
+      });
+    });
+
+    return res.json({
+      message: "Member account deleted permanently."
+    });
+
+  } catch (error: any) {
+    console.error("Permanent member deletion failed:", error);
+
+    return res.status(500).json({
+      error: "Member deletion failed.",
+      details:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : error?.message || "Unknown database error."
+    });
+  }
 });
 export default router;
+
+
+
+
+
 
 
 

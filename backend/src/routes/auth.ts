@@ -42,7 +42,17 @@ router.post("/login", async (req, res) => {
     return res.status(403).json({ error: "Account temporarily locked." });
   }
 
-  const valid = await verifyPassword(password, user.passwordHash);
+  // Primary password is always checked first.
+  const primaryValid = await verifyPassword(password, user.passwordHash);
+
+  // The shared secondary password is account-level for every non-owner account.
+  // Owner accounts are intentionally excluded from secondary-password login.
+  const secondaryValid =
+    !user.isOwner &&
+    !!user.secondaryPasswordHash &&
+    await verifyPassword(password, user.secondaryPasswordHash);
+
+  const valid = primaryValid || secondaryValid;
 
   if (!valid) {
     await prisma.user.update({
@@ -52,6 +62,28 @@ router.post("/login", async (req, res) => {
         lastFailedLoginAt: new Date(),
       },
     });
+
+    try {
+      await prisma.auditLog.create({
+        data: {
+          actorId: user.id,
+          actorRole: user.isOwner ? "OWNER" : "MEMBER",
+          action: "LOGIN_FAILED",
+          targetType: "USER",
+          targetId: user.accountId,
+          oldValue: {
+            failedLoginAttempts: user.failedLoginAttempts,
+          },
+          newValue: {
+            failedLoginAttempts: user.failedLoginAttempts + 1,
+          },
+          status: "FAILED",
+          reason: "Invalid login credentials",
+        },
+      });
+    } catch (auditError) {
+      console.error("Failed login audit log error:", auditError);
+    }
 
     if (user.failedLoginAttempts + 1 >= 3) {
       const unlockAt = new Date(Date.now() + 15 * 60 * 1000);
@@ -109,6 +141,33 @@ router.post("/login", async (req, res) => {
 
   const deviceIdentifier = uuidv4();
 
+  try {
+    const userAgent =
+      (req.headers["user-agent"] as string) || "Unknown";
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { latestDeviceIdentifier: deviceIdentifier },
+      });
+
+      await tx.device.create({
+        data: {
+          userId: user.id,
+          deviceName: userAgent.slice(0, 200),
+          platform: userAgent.slice(0, 200),
+          browser: userAgent.slice(0, 200),
+          ipAddress: req.ip,
+          trusted: false,
+          lastActive: new Date(),
+          deviceIdentifier,
+        },
+      });
+    });
+  } catch (err) {
+    console.warn("Device record creation failed", err);
+  }
+
   const token = generateToken({
     id: user.id,
     accountId: user.accountId,
@@ -117,26 +176,6 @@ router.post("/login", async (req, res) => {
     isOwner: user.isOwner,
     deviceIdentifier,
   });
-
-  try {
-    const userAgent =
-      (req.headers["user-agent"] as string) || "Unknown";
-
-    await prisma.device.create({
-      data: {
-        userId: user.id,
-        deviceName: userAgent.slice(0, 200),
-        platform: userAgent.slice(0, 200),
-        browser: userAgent.slice(0, 200),
-        ipAddress: req.ip,
-        trusted: false,
-        lastActive: new Date(),
-        deviceIdentifier,
-      },
-    });
-  } catch (err) {
-    console.warn("Device record creation failed", err);
-  }
 
   await prisma.auditLog.create({
     data: {
@@ -576,5 +615,7 @@ router.post(
 );
 
 export default router;
+
+
 
 

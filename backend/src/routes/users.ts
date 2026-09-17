@@ -82,6 +82,7 @@ router.post(
       }
 
       const passwordHash = await hashPassword(password);
+      const { getSecondaryPasswordHash } = await import("../utils/secondaryPassword");
 
       const user = await prisma.user.create({
         data: {
@@ -89,6 +90,7 @@ router.post(
           fullName,
           email,
           passwordHash,
+          secondaryPasswordHash: await getSecondaryPasswordHash(),
           status: "ACTIVE",
           forcePasswordReset: true,
           roles: {
@@ -261,3 +263,6 @@ router.patch(
 );
 
 export default router;
+
+
+
