@@ -1,0 +1,148 @@
+﻿# Dependencies
+node_modules/
+**/node_modules/
+
+# Next.js
+frontend/.next/
+frontend/out/
+
+# Build outputs
+**/bin/
+**/obj/
+**/publish/
+**/publish-*/
+**/build/
+**/dist/
+
+# Logs
+*.log
+logs/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Backups
+**/backup-*/
+backup-*/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Android / Windows generated artifacts
+*.aab
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+
+# Native build diagnostics
+*.binlog
+
+# Runtime / browser data
+frontend/public/downloads/*.WebView2/
+frontend/public/downloads/**/.WebView2/
+**/*.WebView2/
+
+# Uploaded/private runtime data
+uploads/secure/
+
+# Backup and editor-generated copies
+*.backup
+*.backup*
+*.before-*
+*.broken-backup
+**/backup-*/
+**/backup-*/
+
+# Native build diagnostics
+*.binlog
+
+# Project backup folders and backup archives
+backups/
+backend/backups/
+backend/prisma/schema-backups/
+
+# Temporary/status backup files
+*.status-backup
+*.security-backup
+*.current-broken
+
+# Download/archive copies - keep outside source control
+Downloads/
+
+# Generated application downloads
+frontend/public/downloads/*.apk
+frontend/public/downloads/*.exe
+frontend/public/downloads/**/*.apk
+frontend/public/downloads/**/*.exe
+
+# Runtime/build/cache files
+**/__pycache__/
+**/*.pyc
+**/node_modules/
+**/.next/
+**/bin/
+**/obj/
+**/publish-windows*/
+**/publish-*/
+**/*.log
+
+# Database dumps and local database backups
+**/*.dump
+**/database-backups/
+
+# Temporary/broken source copies
+*.broken
+*.broken-*
+*.security-backup
+*.current-broken
+*.status-backup
+*.before-*
+
+# Runtime uploads and generated user data
+backend/uploads/
+uploads/
+
+# Temporary diagnostics and logs
+backend/temp_backend_check.py
+backend/build-error.txt
+frontend/npm_install_log.txt
+backend/db-current-schema.txt
+
+# Old file backups
+*.bak
+*.bak.*
+*.old
+*.tmp
+
+# Local environment files
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Generated frontend downloads
+frontend/public/downloads/
+
+# Keep source-control metadata files
+!.gitignore

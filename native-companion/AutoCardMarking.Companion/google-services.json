@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "305894640263",
+    "project_id": "auto-card-marking",
+    "storage_bucket": "auto-card-marking.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:305894640263:android:4d850b3852d72e8fc9c622",
+        "android_client_info": {
+          "package_name": "com.companyname.autocardmarking.companion"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAsE84HUy1cjZqWa9uCvtyme7aK43VxspE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

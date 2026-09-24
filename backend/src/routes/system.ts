@@ -1,0 +1,53 @@
+﻿import { Router } from "express";
+import { authenticate, requireAnyRole, AuthorizedRequest } from "../middleware/authMiddleware";
+import prisma from "../prisma";
+import fs from "fs";
+import path from "path";
+
+const router = Router();
+
+router.use(authenticate);
+
+router.get("/health", async (req: AuthorizedRequest, res) => {
+  const dbStatus = await prisma.$queryRaw`SELECT 1`;
+  const ocrStatus = true;
+  const storagePath = process.env.UPLOAD_BASE_PATH || path.join(__dirname, "../../uploads/secure");
+  const storageAccessible = fs.existsSync(storagePath);
+  const lastBackup = await prisma.backup.findFirst({ orderBy: { completedAt: "desc" } });
+  return res.json({ database: dbStatus ? "ONLINE" : "OFFLINE", ocr: ocrStatus ? "ONLINE" : "OFFLINE", storage: storageAccessible ? "ONLINE" : "OFFLINE", backend: "ONLINE", lastBackup: lastBackup?.completedAt || null });
+});
+
+router.get("/security", requireAnyRole(["OWNER", "SUPER_ADMIN"]), async (req: AuthorizedRequest, res) => {
+  const events = await prisma.securityEvent.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
+  const devices = await prisma.device.findMany({ orderBy: { lastActive: "desc" }, take: 50 });
+  return res.json({ events, devices });
+});
+
+
+router.get("/academic-years", async (req: AuthorizedRequest, res) => {
+  try {
+    const academicYears = await prisma.academicYear.findMany({
+      orderBy: {
+        year: "desc",
+      },
+      select: {
+        id: true,
+        year: true,
+        name: true,
+        startDate: true,
+        endDate: true,
+        isCurrent: true,
+      },
+    });
+
+    return res.json(academicYears);
+  } catch (error) {
+    console.error("Failed to load academic years:", error);
+    return res.status(500).json({
+      error: "Failed to load academic years.",
+    });
+  }
+});
+export default router;
+
+

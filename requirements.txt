@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-multipart
+openpyxl
+pandas
+pillow
+pytesseract
+rapidfuzz
+python-dotenv

@@ -1,0 +1,8 @@
+﻿bin/
+obj/
+publish/
+publish-windows/
+installer-output/
+*.apk
+*.aab
+*.backup-*

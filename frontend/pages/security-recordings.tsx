@@ -1,0 +1,369 @@
+﻿import { useEffect, useRef, useState } from "react";
+import { authFetch, fetcher, getApiUrl } from "../lib/api";
+
+export default function SecurityRecordings() {
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  async function loadSessions() {
+    try {
+      const items = await fetcher(`${getApiUrl()}/api/verification/sessions`);
+      setSessions(items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load recordings.");
+    }
+  }
+
+  useEffect(() => {
+    void loadSessions();
+
+    const onSessionUpdate = () => {
+      void loadSessions();
+    };
+
+    window.addEventListener("verification-session-updated", onSessionUpdate);
+
+    return () => {
+      window.removeEventListener("verification-session-updated", onSessionUpdate);
+    };
+  }, []);
+
+  async function getRecordingBlob(sessionId: number) {
+    const response = await authFetch(
+      `${getApiUrl()}/api/verification/download/${sessionId}`
+    );
+
+    if (!response.ok) {
+      let errorMessage = "Unable to access recording.";
+
+      try {
+        const body = await response.json();
+        errorMessage = body.error || errorMessage;
+      } catch {
+        // Keep default error message.
+      }
+
+      throw new Error(errorMessage);
+    }
+
+    return await response.blob();
+  }
+
+  async function playRecording(sessionId: number) {
+    try {
+      setError(null);
+      setMessage(null);
+
+      const blob = await getRecordingBlob(sessionId);
+      const url = window.URL.createObjectURL(blob);
+
+      if (selectedVideoUrl) {
+        window.URL.revokeObjectURL(selectedVideoUrl);
+      }
+
+      setSelectedVideoUrl(url);
+      setSelectedSessionId(sessionId);
+      setMessage("Recording is ready to play.");
+
+      // Start playback automatically after the player receives the blob URL.
+      setTimeout(() => {
+        const video = videoRef.current;
+
+        if (!video) return;
+
+        video.load();
+
+        void video.play().catch((playError) => {
+          // Browser autoplay policies may block playback with audio.
+          // The native video controls remain available in that case.
+          console.warn("Automatic recording playback was blocked:", playError);
+        });
+      }, 50);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load recording.");
+    }
+  }
+
+  async function downloadRecording(sessionId: number) {
+    try {
+      setError(null);
+      setMessage(null);
+
+      const blob = await getRecordingBlob(sessionId);
+      const url = window.URL.createObjectURL(blob);
+
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `security-verification-${sessionId}.webm`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      window.URL.revokeObjectURL(url);
+
+      setMessage(`Recording #${sessionId} downloaded.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to download recording.");
+    }
+  }
+
+  async function fullscreenVideo() {
+    try {
+      if (!videoRef.current) return;
+
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      await videoRef.current.requestFullscreen();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Fullscreen is not available.");
+    }
+  }
+
+  function closeVideo() {
+    if (selectedVideoUrl) {
+      window.URL.revokeObjectURL(selectedVideoUrl);
+    }
+
+    setSelectedVideoUrl(null);
+    setSelectedSessionId(null);
+  }
+
+  function formatDate(value: string | null | undefined) {
+    return value ? new Date(value).toLocaleString() : "-";
+  }
+
+  return (
+    <div className="space-y-6">
+      <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-semibold text-slate-950">
+          SECURITY RECORDINGS
+        </h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Review completed verification recordings and play secure footage for audit.
+        </p>
+      </header>
+
+      {error && (
+        <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {message && (
+        <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-sm text-emerald-700">
+          {message}
+        </div>
+      )}
+
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        {selectedVideoUrl && (
+          <div className="mb-6 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-semibold text-slate-900">
+                Session #{selectedSessionId}
+              </p>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    selectedSessionId &&
+                    void downloadRecording(selectedSessionId)
+                  }
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                  title="Download recording"
+                  aria-label="Download recording"
+                >
+                  <svg
+                    width="17"
+                    height="17"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 3v12" />
+                    <path d="m7 10 5 5 5-5" />
+                    <path d="M5 21h14" />
+                  </svg>
+                  DOWNLOAD
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void fullscreenVideo()}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-900"
+                  title="Fullscreen"
+                  aria-label="Fullscreen"
+                >
+                  <svg
+                    width="17"
+                    height="17"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+                    <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+                    <path d="M21 16v3a2 2 0 0 1-2 2h-3" />
+                    <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+                  </svg>
+                  FULLSCREEN
+                </button>
+
+                <button
+                  type="button"
+                  onClick={closeVideo}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-300"
+                  title="Close player"
+                  aria-label="Close player"
+                >
+                  <svg
+                    width="17"
+                    height="17"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 6l12 12" />
+                    <path d="M18 6 6 18" />
+                  </svg>
+                  CLOSE
+                </button>
+              </div>
+            </div>
+
+            <video
+              ref={videoRef}
+              controls
+              autoPlay
+              className="w-full rounded-2xl border border-slate-200 bg-black"
+              src={selectedVideoUrl}
+              onLoadedData={(event) => {
+                void event.currentTarget.play().catch((playError) => {
+                  console.warn("Automatic recording playback was blocked:", playError);
+                });
+              }}
+            />
+          </div>
+        )}
+
+        {sessions.length ? (
+          <div className="space-y-4">
+            {sessions.map((session) => (
+              <div
+                key={session.id}
+                className="rounded-3xl border border-slate-200 bg-slate-50 p-4"
+              >
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      Member:{" "}
+                      {session.user?.fullName ||
+                        session.user?.accountId ||
+                        "Unknown"}
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-600">
+                      Account ID: {session.user?.accountId || "-"}
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-600">
+                      Session: #{session.id}
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-600">
+                      Duration: {session.durationSeconds ?? 5} seconds
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-600">
+                      Status: {session.status}
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-600">
+                      Recording date/time: {formatDate(session.completedAt)}
+                    </p>
+                  </div>
+
+                  {session.mediaPath ? (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void playRecording(session.id)}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-700"
+                        title="Play recording"
+                        aria-label="Play recording"
+                      >
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          aria-hidden="true"
+                        >
+                          <path d="M8 5v14l11-7L8 5z" />
+                        </svg>
+                        PLAY RECORDING
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void downloadRecording(session.id)}
+                        className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-white transition hover:bg-emerald-700"
+                        title="Download recording"
+                        aria-label={`Download recording ${session.id}`}
+                      >
+                        <svg
+                          width="19"
+                          height="19"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M12 3v12" />
+                          <path d="m7 10 5 5 5-5" />
+                          <path d="M5 21h14" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-2xl bg-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 lg:mt-0">
+                      No recording yet
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
+            No security recordings available yet.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+

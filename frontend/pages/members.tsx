@@ -1,0 +1,624 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import { fetcher, getApiUrl } from "../lib/api";
+
+type Member = {
+  id?: string;
+  memberId?: string;
+  fullName?: string;
+  grade?: string;
+  position?: string;
+  status?: string;
+  email?: string;
+  userId?: string;
+  user?: {
+    id?: string;
+    accountId?: string;
+    email?: string;
+    fullName?: string;
+    status?: string;
+    roles?: Array<{
+      role?: {
+        name?: string;
+      };
+    }>;
+  };
+};
+
+export default function Members() {
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const loadMembers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const res = await fetcher(
+        `${getApiUrl()}/api/members?page=1&pageSize=1000`
+      );
+
+      setMembers(res.data || []);
+    } catch (err: any) {
+      setError(err?.message || "Failed to load members.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadMembers();
+  }, []);
+
+  const getAccountId = (member: Member) => {
+    return (
+      member.user?.accountId ||
+      member.memberId ||
+      "-"
+    );
+  };
+
+  const getRole = (member: Member) => {
+    const roles =
+      member.user?.roles
+        ?.map((item) => item.role?.name)
+        .filter(Boolean);
+
+    if (roles?.length) {
+      return roles.join(", ");
+    }
+
+    return member.position || "MEMBER";
+  };
+
+  const getStatus = (member: Member) => {
+    return (
+      member.user?.status ||
+      member.status ||
+      "ACTIVE"
+    ).toUpperCase();
+  };
+
+  const filteredMembers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    if (!query) return members;
+
+    return members.filter((member) => {
+      const values = [
+        member.memberId,
+        member.fullName,
+        member.user?.fullName,
+        member.user?.accountId,
+        member.email,
+        member.user?.email,
+        getRole(member),
+        getStatus(member),
+      ];
+
+      return values.some((value) =>
+        String(value || "").toLowerCase().includes(query)
+      );
+    });
+  }, [members, search]);
+
+  const handleBlock = async (member: Member) => {
+    const memberId = member.memberId;
+
+    if (!memberId) return;
+
+    const confirmed = window.confirm(
+      `Block "${member.fullName || memberId}"?\n\nThis account will no longer be able to use the system.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setBusyId(memberId);
+
+      await fetcher(
+        `${getApiUrl()}/api/members/${encodeURIComponent(memberId)}/block`,
+        {
+          method: "POST",
+        }
+      );
+
+      await loadMembers();
+      setOpenMenu(null);
+    } catch (err: any) {
+      alert(err?.message || "Failed to block member.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleUnblock = async (member: Member) => {
+    const memberId = member.memberId;
+
+    if (!memberId) return;
+
+    const confirmed = window.confirm(
+      `Unblock "${member.fullName || memberId}"?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setBusyId(memberId);
+
+      await fetcher(
+        `${getApiUrl()}/api/members/${encodeURIComponent(memberId)}/unblock`,
+        {
+          method: "POST",
+        }
+      );
+
+      await loadMembers();
+      setOpenMenu(null);
+    } catch (err: any) {
+      alert(err?.message || "Failed to unblock member.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDelete = async (member: Member) => {
+    const memberId = member.memberId;
+
+    if (!memberId) return;
+
+    const confirmed = window.confirm(
+      `DELETE "${member.fullName || memberId}"?\n\nThis action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    const secondConfirm = window.confirm(
+      "Are you absolutely sure you want to permanently delete this member?"
+    );
+
+    if (!secondConfirm) return;
+
+    try {
+      setBusyId(memberId);
+
+      await fetcher(
+        `${getApiUrl()}/api/members/${encodeURIComponent(memberId)}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      await loadMembers();
+      setOpenMenu(null);
+    } catch (err: any) {
+      alert(err?.message || "Failed to delete member.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleRoleChange = async (member: Member) => {
+    const userId = member.user?.id || member.userId;
+
+    if (!userId) {
+      alert("User ID is not available for this member.");
+      return;
+    }
+
+    const roleNames =
+      member.user?.roles
+        ?.map((item) => item.role?.name)
+        .filter(Boolean) || [];
+
+    const isAdmin = roleNames.some(
+      (role) => String(role).toUpperCase() === "ADMIN"
+    );
+
+    const targetRole = isAdmin ? "MEMBER" : "ADMIN";
+
+    const confirmed = window.confirm(
+      isAdmin
+        ? `Demote "${member.fullName || member.memberId}" to Member?`
+        : `Promote "${member.fullName || member.memberId}" to Admin?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setBusyId(member.memberId || String(userId));
+
+      await fetcher(
+        `${getApiUrl()}/api/users/${encodeURIComponent(String(userId))}/role`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            roleName: targetRole,
+          }),
+        }
+      );
+
+      await loadMembers();
+      setOpenMenu(null);
+      setMoreOptionsOpen(null);
+
+      alert(
+        targetRole === "ADMIN"
+          ? "Member promoted to Admin successfully."
+          : "Admin demoted to Member successfully."
+      );
+    } catch (err: any) {
+      alert(err?.message || "Failed to update member role.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+  const handleViewDetails = (member: Member) => {
+    if (!member.memberId) return;
+
+    window.location.href =
+      `/members/${encodeURIComponent(member.memberId)}`;
+  };
+
+  return (
+    <div className="space-y-6">
+
+      {/* HEADER */}
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
+          <div>
+            <h1 className="text-2xl font-bold text-slate-950">
+              Members
+            </h1>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Manage member accounts, access, roles and account status.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Total Members
+            </div>
+
+            <div className="mt-1 text-3xl font-black text-slate-950">
+              {members.length}
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* ERROR */}
+      {error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* MEMBERS DETAILS */}
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+
+        <div className="border-b border-slate-200 p-5">
+
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
+            <div>
+              <h2 className="text-lg font-bold text-slate-950">
+                Members Details
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                {filteredMembers.length} member
+                {filteredMembers.length === 1 ? "" : "s"} shown
+              </p>
+            </div>
+
+            {/* SEARCH */}
+            <div className="relative w-full md:w-[380px]">
+
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                🔍
+              </span>
+
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search RC No, name, account ID, role..."
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              />
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* TABLE */}
+        <div className="overflow-x-auto">
+
+          {loading ? (
+            <div className="p-10 text-center text-sm font-medium text-slate-500">
+              Loading members...
+            </div>
+          ) : filteredMembers.length === 0 ? (
+            <div className="p-10 text-center">
+              <div className="text-4xl">👥</div>
+
+              <p className="mt-3 font-bold text-slate-800">
+                No members found
+              </p>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Try changing your search.
+              </p>
+            </div>
+          ) : (
+            <table className="min-w-[1000px] w-full text-left">
+
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+
+                  <th className="px-5 py-4 text-xs font-black uppercase tracking-wider text-slate-500">
+                    RC No
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-black uppercase tracking-wider text-slate-500">
+                    Full Name
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-black uppercase tracking-wider text-slate-500">
+                    Account ID
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-black uppercase tracking-wider text-slate-500">
+                    Role
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-black uppercase tracking-wider text-slate-500">
+                    Status
+                  </th>
+
+                  <th className="px-5 py-4 text-right text-xs font-black uppercase tracking-wider text-slate-500">
+                    Actions
+                  </th>
+
+                </tr>
+              </thead>
+
+              <tbody>
+
+                {filteredMembers.map((member, index) => {
+
+                  const memberId = member.memberId || `row-${index}`;
+                  const status = getStatus(member);
+                  const blocked =
+                    status === "BLOCKED" ||
+                    status === "INACTIVE";
+
+                  const busy = busyId === memberId;
+
+                  return (
+                    <tr
+                      key={memberId}
+                      className="border-b border-slate-100 transition hover:bg-slate-50"
+                    >
+
+                      {/* RC */}
+                      <td className="px-5 py-4">
+
+                        <div className="font-bold text-slate-900">
+                          {member.memberId || "-"}
+                        </div>
+
+                      </td>
+
+                      {/* NAME */}
+                      <td className="px-5 py-4">
+
+                        <div className="font-semibold text-slate-900">
+                          {member.fullName ||
+                            member.user?.fullName ||
+                            "-"}
+                        </div>
+
+                        {member.email && (
+                          <div className="mt-1 text-xs text-slate-400">
+                            {member.email}
+                          </div>
+                        )}
+
+                      </td>
+
+                      {/* ACCOUNT */}
+                      <td className="px-5 py-4">
+
+                        <span className="rounded-lg bg-blue-50 px-2.5 py-1 font-mono text-xs font-bold text-blue-700">
+                          {getAccountId(member)}
+                        </span>
+
+                      </td>
+
+                      {/* ROLE */}
+                      <td className="px-5 py-4">
+
+                        <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                          {getRole(member)}
+                        </span>
+
+                      </td>
+
+                      {/* STATUS */}
+                      <td className="px-5 py-4">
+
+                        <span
+                          className={
+                            blocked
+                              ? "inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700"
+                              : "inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700"
+                          }
+                        >
+                          {blocked ? "BLOCKED" : status}
+                        </span>
+
+                      </td>
+
+                      {/* ACTIONS */}
+                      <td className="relative px-5 py-4 text-right">
+
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            setOpenMenu(
+                              openMenu === memberId
+                                ? null
+                                : memberId
+                            )
+                          }
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xl font-black text-black shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          aria-label="Member actions"
+                        >
+                          ⋮
+                        </button>
+
+                        {openMenu === memberId && (
+                          <div className="absolute right-5 top-16 z-50 w-52 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 text-left text-black shadow-2xl">
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleViewDetails(member)
+                              }
+                              className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                            >
+                              👁 View Details
+                            </button>
+
+                            {!blocked ? (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  handleBlock(member)
+                                }
+                                className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                              >
+                                🔒 Block Account
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  handleUnblock(member)
+                                }
+                                className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                              >
+                                🔓 Unblock Account
+                              </button>
+                            )}
+
+                            <div className="my-1 border-t border-slate-100" />
+
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                setMoreOptionsOpen(
+                                  moreOptionsOpen === memberId
+                                    ? null
+                                    : memberId
+                                )
+                              }
+                              className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                            >
+                              ⚙ More Options
+                            </button>
+
+                            {moreOptionsOpen === memberId && (
+                              <div className="mt-1 rounded-xl border border-slate-100 bg-slate-50 p-1">
+                                {String(getRole(member)).toUpperCase().split(",").map((role) => role.trim()).includes("ADMIN") ? (
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      handleRoleChange(member)
+                                    }
+                                    className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-orange-700 hover:bg-orange-50 disabled:opacity-50"
+                                  >
+                                    ⬇ Demote To Member
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      handleRoleChange(member)
+                                    }
+                                    className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                                  >
+                                    ⬆ Promote To Admin
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="my-1 border-t border-slate-100" />
+
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                handleDelete(member)
+                              }
+                              className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                            >
+                              🗑 Delete Account
+                            </button>
+
+                          </div>
+                        )}
+
+                      </td>
+
+                    </tr>
+                  );
+                })}
+
+              </tbody>
+
+            </table>
+          )}
+
+        </div>
+
+      </section>
+
+      {/* CLOSE MENU */}
+      {openMenu && (
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="fixed inset-0 z-40 cursor-default"
+          onClick={() => setOpenMenu(null)}
+        />
+      )}
+
+    </div>
+  );
+}
+
+
+
+
+
